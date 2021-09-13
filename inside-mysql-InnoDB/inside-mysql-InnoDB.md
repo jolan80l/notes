@@ -39,3 +39,66 @@
   - LRU List：（从磁盘）新读取到的页，虽然是最新访问的页，但并不直接放入到LRU列表的首部，而是放入到LRU列表的midpoint位置。该位置默认是在LRU列表的5/8处（SHOW VARIABLES  LIKE 'innodb_old_blocks_pct'）。把midpoint之后的列表成为old列表，之前的列表成为new列表。之所以不直接采用最朴素的LRU算法，是因为有可能查询的页虽然是最新的，但是并非热点数据，那么可能将真正需要的热点数据从LRU列表中移除。引入另一个参数进一步管理LRU列表（SET GLOBAL innodb_old_blocks_time = 1000），用来表示页读取到mid位置后需要等待多久才会被加入到LRU列表热端。
   - Free列表：数据库刚刚启动时，LRU列表是空的，这时页都存放在Free列表中，当需要从缓冲池分页时，先从Free列表中查找是否有可用的空闲也，如果有则将该页从Free列表删除，放入到LRU列表中。否则根据LRU算法淘汰末尾页（SHOW ENGINE INNODB STATUS）。其中Buffer pool hit rate用来表示命中率，若小于95%，用户需要观察是否是由于全表扫描引起LRU列表被污染。
   - 脏页：LRU列表被修改后被称为脏页，即缓冲池中的页和磁盘上的页的数据不一致，这是会用CHECKPOINT机制将脏页刷新回磁盘，Flush列表中的页即为脏页。脏页既存在于LRU列表中，也存在于Flush列表中。
+
+- 重做日志缓冲：重做日志缓冲不用太大，一般设置8M即可（SHOW VARIABLES LIKE 'innodb_log_buffer_size';），因为一般每1秒就会把重做日志缓冲中的内容刷新到磁盘。
+  - Master Thread每1秒将重做日志刷新到重做日志文件
+  - 每个事物提交会把重做日志缓冲刷新到重做日志文件
+  - 当重做日志缓冲池剩余空间小于1/2会把重做日志缓冲刷新到重做日志文件
+
+- checkpoint：为避免发生数据丢失，事物提交时会先写重做日志，再修改页。Checkpoint技术解决一下几个问题。
+  - 缩短数据库的恢复时间
+  - 缓冲池不够用时，将脏页刷新到磁盘
+  - 重做日志不可用时，刷新脏页
+
+​        InnoDB存储引擎有两种Checkpoint：
+
+- - Sharp Checkpoint:数据库关闭时，将所有脏页刷新回磁盘
+  - Fuzzy Checkpoint:刷新一部分脏页回磁盘
+    - Master Thread Checkpoint：以每秒或每十秒将脏页刷新回磁盘
+    - FLUSH_LRU_LIST Checkpoint：为保证LRU列表中有一定比例空闲的页，会将LRU列表的尾端页移除，如果这些页有脏页，则将脏页刷新回磁盘
+    - Async/Sync Flush Checkpoint:重做日志不可用时，将一些脏页刷新会磁盘
+    - Dity Page too much Checkpoint:脏页数量太多，强制进行Checkpoint
+
+- Master Thread（1.0.x前版本）
+
+        主循环（loop）
+
+  - 每秒一次执行的操作：
+
+    - 日志缓冲刷新到磁盘，即使这个事物还没有提交（总是）
+
+    - 合并插入缓冲（可能）：当前IO如果小于每秒5此才执行
+
+    - 最多刷新100个InnoDB的缓冲池中的脏也到磁盘（可能）：根据脏页比例是否大于配置（innodb_max_dirty_pages_pct）
+  
+    - 如果当前没有用户活动，则切换到background loop(可能)
+    
+  - 每10秒一次执行的操作：
+    
+    - 刷新100个脏页到磁盘（可能的情况下）：如果过去10秒的IO操作小于200此，则进行此操作
+    
+    - 合并之多5个插入缓冲（总是）
+    
+    - 将日志缓冲刷新到磁盘（总是）
+    
+    - 删除无用的Undo页（总是）：执行full purge操作，即删除无用的Undo页，每次最多尝试回收20个undo页。undo页用来存放数据修改前的数据，如update和delete的数据。update和delete执行完成后，存储引擎判断是否还需要undo页信息，比如有查询需要读取之前版本的undo信息
+    
+    - 刷新100个或者10个脏页到磁盘（总是）：脏页比例大于70%则刷新100页，否则刷新10页
+    
+  
+  ​    后台循环（background loop）:当前没有用户活动或数据库关闭，会切换到这个循环
+  
+  - 删除无用的undo页（总是）
+  
+  - 合并20个插入缓冲（总是）
+  
+  - 跳回到主循环（总是）
+  
+  - 不断刷新100个页知道符合条件（可能，跳转到flush loop中完成）
+  
+- InnoDB 1.2.x之前的版本优化：增加了几个参数来适应不同服务器内存或IO速度的不同。如前面所述的每次刷新200个脏页等。
+
+  - 每秒刷新到磁盘的脏页比例innodb_max_dirty_pages_pct可配置化，默认是75%
+  - innodb_adaptive_flushing（自适应刷新脏页）：根据重做日志的生成速度决定这个参数
+
+- InnoDB 1.2.x版本的优化：对于刷新脏页的操作，从Master Thread线程分离到单独的Page Cleaner Thread，从而减轻了Mater Thread的工作，同时进一步提高了系统的并发性
