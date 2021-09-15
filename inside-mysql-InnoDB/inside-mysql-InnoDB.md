@@ -102,3 +102,10 @@
   - innodb_adaptive_flushing（自适应刷新脏页）：根据重做日志的生成速度决定这个参数
 
 - InnoDB 1.2.x版本的优化：对于刷新脏页的操作，从Master Thread线程分离到单独的Page Cleaner Thread，从而减轻了Mater Thread的工作，同时进一步提高了系统的并发性
+
+- Insert Buffer：在进行插入操作时，如果需要插入非聚集索引，就要离散的访问非聚集索引页，所以先判断非聚集索引是否在缓冲池，如果在直接更新，否则先放入Insert Buffer中，再以一定的频率和辅助索引页节点进行合并（merge）。Insert Buffer需要满足两个条件，一个是索引是辅助索引（secondary index），一个是索引不能是唯一（unique）的。Insert Buffer的大小可以用参数调整：IBUF_POOL_SIZE_PER_MAX_SIZE。
+- Insert Buffer是一个全局的B+树，存储引擎中所有的辅助索引都在这个B+树中维护。后续有对Insert Buffer进行了升级，delete和update都可以进行缓冲，也就是1.0.x版本开始引入的change Buffer。
+- Merge Insert Buffer，发生一下几种情况，会触发存储引擎将Insert Buffer合并到辅助索引页
+  - 当辅助索引页被读取到缓冲池中时
+  - Insert Buffer Bitmap页追踪到该辅助索引页已无可用空间时
+  - Master Thread线程中每秒或每10秒会进行一次Merge Insert Buffer的操作
