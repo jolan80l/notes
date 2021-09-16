@@ -109,3 +109,12 @@
   - 当辅助索引页被读取到缓冲池中时
   - Insert Buffer Bitmap页追踪到该辅助索引页已无可用空间时
   - Master Thread线程中每秒或每10秒会进行一次Merge Insert Buffer的操作
+
+- 两次写：doublewrite带给InnoDB存储引擎的是数据页的可靠性。如数据在从缓冲池刷新到磁盘时发生宕机，那么数据将会丢失。所以引入两次写，即数据从缓冲池写入磁盘前先写入doublewrite buffer，doublewrite在分成2此，每次1M将数据写入到doublewrite所在的共享表空间，此时的写入是连续的，再从缓冲池写入到磁盘，此时的写入是离散的。如果写入磁盘时候发生宕机，则从doublewrite共享表空间获取一份页的副本，再应用重做日志。
+- 自适应哈希索引：数据库根据热点访问的数据，自动简历哈希索引。建立哈希索引必须是一直以某个模式进行访问，如where a = xxx。如果交替使用where a =  xxx和where a = xxx and b = xxx则不会建立哈希索引。
+- 异步IO：如果访问的也是连续的，会合并多个IO请求到一次IO请求中去。
+- 刷新邻接页
+- 参数文件：MySQL启动时指定的参数的文件。mysql--help | grep my.cnf。select * from GLOBAL_VARIABLES WHERE VARIABLE_NAME LIKE 'innodb_buffer%';参数类型包括动态参数和静态参数。动态参数可以用过set命令动态指定，静态参数只能在数据库启动时生效。
+- 错误日志文件：SHOW VARIBLES LIKE 'log_error';
+- 慢查询日志：SHOW VARIBLES LIKE 'long_query_time'; SHOW VARIBLES LIKE 'log_show_queries';  得到执行时间最长的10条SQL语句：mysqldumpslow -s al -n 10 jolan.log;   SELECT * FROM mysql.slow_log;
+- 二进制日志（binary log）：记录了MySQL数据库执行更改的所有操作，但是不包括SELECT和SHOW这类操作。二进制日志的作用：恢复、复制、审计。
