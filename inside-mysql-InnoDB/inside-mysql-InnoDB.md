@@ -104,17 +104,55 @@
 - InnoDB 1.2.x版本的优化：对于刷新脏页的操作，从Master Thread线程分离到单独的Page Cleaner Thread，从而减轻了Mater Thread的工作，同时进一步提高了系统的并发性
 
 - Insert Buffer：在进行插入操作时，如果需要插入非聚集索引，就要离散的访问非聚集索引页，所以先判断非聚集索引是否在缓冲池，如果在直接更新，否则先放入Insert Buffer中，再以一定的频率和辅助索引页节点进行合并（merge）。Insert Buffer需要满足两个条件，一个是索引是辅助索引（secondary index），一个是索引不能是唯一（unique）的。Insert Buffer的大小可以用参数调整：IBUF_POOL_SIZE_PER_MAX_SIZE。
+
 - Insert Buffer是一个全局的B+树，存储引擎中所有的辅助索引都在这个B+树中维护。后续有对Insert Buffer进行了升级，delete和update都可以进行缓冲，也就是1.0.x版本开始引入的change Buffer。
+
 - Merge Insert Buffer，发生一下几种情况，会触发存储引擎将Insert Buffer合并到辅助索引页
   - 当辅助索引页被读取到缓冲池中时
   - Insert Buffer Bitmap页追踪到该辅助索引页已无可用空间时
   - Master Thread线程中每秒或每10秒会进行一次Merge Insert Buffer的操作
 
 - 两次写：doublewrite带给InnoDB存储引擎的是数据页的可靠性。如数据在从缓冲池刷新到磁盘时发生宕机，那么数据将会丢失。所以引入两次写，即数据从缓冲池写入磁盘前先写入doublewrite buffer，doublewrite在分成2此，每次1M将数据写入到doublewrite所在的共享表空间，此时的写入是连续的，再从缓冲池写入到磁盘，此时的写入是离散的。如果写入磁盘时候发生宕机，则从doublewrite共享表空间获取一份页的副本，再应用重做日志。
+
 - 自适应哈希索引：数据库根据热点访问的数据，自动简历哈希索引。建立哈希索引必须是一直以某个模式进行访问，如where a = xxx。如果交替使用where a =  xxx和where a = xxx and b = xxx则不会建立哈希索引。
+
 - 异步IO：如果访问的也是连续的，会合并多个IO请求到一次IO请求中去。
+
 - 刷新邻接页
+
 - 参数文件：MySQL启动时指定的参数的文件。mysql--help | grep my.cnf。select * from GLOBAL_VARIABLES WHERE VARIABLE_NAME LIKE 'innodb_buffer%';参数类型包括动态参数和静态参数。动态参数可以用过set命令动态指定，静态参数只能在数据库启动时生效。
+
 - 错误日志文件：SHOW VARIBLES LIKE 'log_error';
+
 - 慢查询日志：SHOW VARIBLES LIKE 'long_query_time'; SHOW VARIBLES LIKE 'log_show_queries';  得到执行时间最长的10条SQL语句：mysqldumpslow -s al -n 10 jolan.log;   SELECT * FROM mysql.slow_log;
+
 - 二进制日志（binary log）：记录了MySQL数据库执行更改的所有操作，但是不包括SELECT和SHOW这类操作。二进制日志的作用：恢复、复制、审计。
+
+- InnoDB所有数据都被逻辑地存放在一个空间中，称之为表空间。表空间又有段（segment）、区（extent）、页（page）组成
+
+- 区是由连续的页组成的空间，在任何情况下每个区的大小都为1MB。InnoDB存储引擎页的大小为16KB，即一个区中一共有64个连续的页。在InnoDB1.0.X之后引入了压缩页，所以一个区也可能有512、256、128个页。
+
+- InnoDB的行记录格式：略
+
+- 创建触发器的命令是CREATE TRIGGER，只有具备Super权限的MySQL数据库用户才可以执行这条命令。最多可以为一个表建立6个触发器，即分别为INSERT、UPDATE、DELETE的BEFORE和AFTER各一个。
+
+- 视图定义中的WITH CHECK OPTION是针对对于可更新的视图的，即更新的值是否需要检查。对于不满足视图条件的，将会抛出一个异常，不允许视图中的数据更新。
+
+- 分区是MySQL的功能，不是存储引擎的功能，但是并非所有存储引擎都支持分区。MySQL只支持水平分区（按行），不支持垂直分区（按列）。使用SHOW VARIABLES LIKE '%partition%'查看是否开启了分区功能。
+
+    - RANGE分区：行数据基于属于一个给定连续区间的列值被放入分区。MySQL5.5开始支持。
+      - 启用分区后，表不再有一个idb文件组成，而是由建立分区时的各个分区idb文件组成。如t#P##p0.idb，t#P##p1.idb
+      - CREATE TABLE t(id INT) ENGINE=INNODB PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 LESS THAN (20))
+      - 通过SELECT * FROM information_schema.PARTITIONS WHERE table_schema=database() AND table_name = ''来查询分区使用情况。TABLES_ROWS列反映了每个分区中记录的数量。PARTITION_METHOD表示分区类型。
+      - 当插入一个不再分区中定义的值时，MySQL数据库会抛出一个异常。可加入一个最大值的分区：ALTER TABLE t ADD PARTITION (partition p2 values less than maxvalue)
+      - RANGE分区主要用于日期列的分区
+      - PANGE分区的查询，优化器只能对YEAR()，TO_DAYS()，TO_SECONDS()，UNIX_TIMESTAMP()这类函数进行优化选择。如CREATE TABLE sales(money INT UNSIGEND NOT NULL, date DATE) ENGINE=INNODB PARTITION BY RANGE (TO_DAYS(date))
+    - LIST分区：和RANGE分区类似，只是LIST分区面相的是离散的值
+      - CREATE TABLE t(id INT) ENGINE=INNODB PARTITION BY LIST(id) (PARTITION p0 VALUES IN(1,3,5,7,9), PARTITION p1 VALUES IN (0,2,4,6,8)
+    - HASH分区：根据用户自动以的表达式的返回值来进行分区，返回值不能为负数。
+      - CREATE TABLE t_hash(a INT, b DATETIME) ENGINE = INNODB PARTITION BY HASH (YEAH(b)) PARTITIONS 4;如果插入一个列b为2010-04-01的记录到t_hash表，那么保存该条记录的分区如下 MOD(YEAH('2010-04-01'), 4)=>MOD(2010, 4)=>2
+      - MySQL数据库还支持一种称为LINEAR HASH的分区，它使用一个更加复杂的算法，创建时把 BY HASH修改为 BY LINEAR HASH即可。LINEAR HASH分区的有点在于速度更快，缺点是数据分部可能不太均衡
+    - KEY分区：根据MySQL数据库提供的哈希函数来进行分区。
+    - CLOUMNS分区：前面四种分区的条件是数据必须是整形（INTEGER），如果不是整形，那应该通过函数将其转换为整形，如YEAR()，TO_DAYS()等。COLUMNS分区支持所有整形、日期类型、字符串类型。关键字：PARTITION BY RANGE COLUMNS (b)，PARTITION BY LISTCOLUMNS (b)。
+    - 
+
