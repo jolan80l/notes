@@ -147,12 +147,82 @@
       - 当插入一个不再分区中定义的值时，MySQL数据库会抛出一个异常。可加入一个最大值的分区：ALTER TABLE t ADD PARTITION (partition p2 values less than maxvalue)
       - RANGE分区主要用于日期列的分区
       - PANGE分区的查询，优化器只能对YEAR()，TO_DAYS()，TO_SECONDS()，UNIX_TIMESTAMP()这类函数进行优化选择。如CREATE TABLE sales(money INT UNSIGEND NOT NULL, date DATE) ENGINE=INNODB PARTITION BY RANGE (TO_DAYS(date))
+      
     - LIST分区：和RANGE分区类似，只是LIST分区面相的是离散的值
+      
       - CREATE TABLE t(id INT) ENGINE=INNODB PARTITION BY LIST(id) (PARTITION p0 VALUES IN(1,3,5,7,9), PARTITION p1 VALUES IN (0,2,4,6,8)
+      
     - HASH分区：根据用户自动以的表达式的返回值来进行分区，返回值不能为负数。
       - CREATE TABLE t_hash(a INT, b DATETIME) ENGINE = INNODB PARTITION BY HASH (YEAH(b)) PARTITIONS 4;如果插入一个列b为2010-04-01的记录到t_hash表，那么保存该条记录的分区如下 MOD(YEAH('2010-04-01'), 4)=>MOD(2010, 4)=>2
       - MySQL数据库还支持一种称为LINEAR HASH的分区，它使用一个更加复杂的算法，创建时把 BY HASH修改为 BY LINEAR HASH即可。LINEAR HASH分区的有点在于速度更快，缺点是数据分部可能不太均衡
+      
     - KEY分区：根据MySQL数据库提供的哈希函数来进行分区。
+    
     - CLOUMNS分区：前面四种分区的条件是数据必须是整形（INTEGER），如果不是整形，那应该通过函数将其转换为整形，如YEAR()，TO_DAYS()等。COLUMNS分区支持所有整形、日期类型、字符串类型。关键字：PARTITION BY RANGE COLUMNS (b)，PARTITION BY LISTCOLUMNS (b)。
-    - 
+    
+    - MySQL数据库允许在RANGE和LIST的分区上再进行HASH或KEY子分区
+    
+    - 分区对于NULL值的处理
+    
+      - 对于RANGE分区，如果向分区列插入了NULL值，则MySQL数据库会将该值放入最左边的分区
+    
+      - 在LIST分区下要使用NULL值，则必须显示地指出哪个分区中放入NULL值，否则会报错
+    
+      - HASH和KEY分区的任何分区函数都会将含有NULL值的记录返回为0
+    
+- MySQL5.6开始，支持分区或子分区中的数据与另一个非分区表中的数据进行交换：ALTER TABLE ... EXCHANGE PARTITION。ALTER TABLE e EXCHANGE PARTITION p0 WITH TABLE e2;
 
+- 索引与算法
+
+  - B+树索引并不能找到一个给定键值的具体行。B+树索引能找到的知识被查找数据行所在的页，然后数据库通过把页读入到内存，再在内存中进行查找，最后得到要查找的数据。
+
+    ``` html
+    B+树的新增操作
+    ```
+
+  - Leaf Page未满，Index Page未满：直接将记录插入到叶子节点
+
+  - Leaf Page满，Index Page未满
+
+    - 拆分Leaf Page
+    - 将（拆分后）中间的节点放入到Index Page中
+    - 将小于中间节点的记录放左边
+    - 大于或等于中间节点的记录放右边
+
+  - Leaf Page满，Index Page满
+
+    - 拆分Leaf Page
+
+    - 将（拆分后）小于中间节的记录放左边
+
+    - 大于或等于中间节点的记录放右边
+
+    - 拆分Index Page
+
+    - 将（拆分后）小于中间节的记录放左边
+
+    - 大于中间节点的记录放右边
+
+    - 中间节点放入上一层Index Page（比如2层树高变为3层树高）
+
+  - 如果Leaf Page已满，但其他左右兄弟节点没有满的情况下，B+树不会急于去做拆分页，而是会先做旋转，也就是把新增的节点平衡到其他兄弟节点上去
+
+    ```html
+    B+树的删除操作：B+树使用填充因子（fill factor）来控制树的删除变化，50%是填充因子可设的最小值。
+    ```
+
+  - 叶子节点不小于填充因子，中间节点不小于填充因子：直接将记录从叶子节点删除，如果该节点还是Index Page的节点，用该节点的右节点代替
+
+  - 叶子节点小于填充因子，中间节点不小于填充因子：合并叶子节点和它的兄弟节点，同事更新Index Page
+
+  - 叶子节点小于填充因子，中间节点小于填充因子
+
+    - 合并叶子节点和它的兄弟节点
+    - 更新Index Page
+    - 合并Index Page和它的兄弟节点
+
+- B+索引在数据库中有个特点是高扇出性，因此在数据库中，B+树的高度一般都在2~4层，这也就是说查找某一个键值的记录时最多只需要2到4次IO，2~4次IO意味着查询时只需要0.02到0.04秒。数据库中的B+树索引可分为聚集索引和辅助索引，但是不管是哪种索引，其内部都是B+树的，即高度平衡的，叶子节点存放着所有的数据。聚集索引与辅助索引不同的是，叶子节点存放的是否是一整行的信息。
+
+- 聚集索引：聚集索引（clustered index）是按照每张表的主键构造一颗B+树，同时叶子节点中存放的即为整张表的行记录数据，也将聚集索引的叶子节点成为数据页。聚集索引的这个特性决定了索引组织表中数据的是索引的一部分。同B+树数据结构一样，每个数据页都通过一个双向链表来进行链接。由于实际的数据页只能按照一颗B+树进行排序，因此每张表只能拥有一个聚集索引。在多数情况下，查询优化器倾向于采用聚集索引。因为聚集索引能够在B+树索引的叶子节点上直接找到数据。此外，由于定义了数据的逻辑顺序，聚集索引能够特别快地访问范围的查询。查询优化器能够快速发现某一段范围的数据页需要扫描。聚集索引的另一个好处是，它对主键的排序查找和范围查找速度非常快。叶子节点的数据就是用户要查询的数据。
+
+- 辅助索引：对于辅助索引（Secondary Index，也成非聚集索引），叶子节点并不包括行记录的全部数据。叶子节点除了包含键值以为，每个叶子节点的索引行中还包含了一个书签（bookmark）。该书签是用来告诉InnoDB存储引擎哪里可以找到与索引想对应的行数据。由于InnoDB存储引擎是索引组织表，因此InnoDB存储引擎的辅助索引的书签就是相应行数据的聚集索引键。举例来说，如果在一颗高度为3的辅助索引树中查找数据，那需要对这颗辅助索引树遍历3遍找到指定的主键，如果聚集索引树的高度也是3，那么还需要对聚集索引树进行3次查找，最终找到一个完整的行数据所在页，因此一共需要6次逻辑IO访问以得到最终的一个数据页。
