@@ -240,4 +240,78 @@
 
 - 覆盖索引：查询的所有列都在辅助索引上的索引叫覆盖索引。由于辅助索引叶子节点存储的是索引和聚集索引的书签，所以可能需要回表操作，但是如果需要查询的列全部在辅助索引上，则不需要回表操作。使用explain解释时，Extra字段为Using index表示使用了覆盖索引。
 
-- 
+- InnoDB存储引擎会行级别上对表数据上锁
+
+- 锁
+
+  - lock的对象是事物，用来锁定的是数据库中的对象，如表、页、行。并且一般lock的对象仅在事物commit或rollback后进行释放（不同事物隔离级别释放的时间可能不同）。![avatar](lock_and_lanch.png "lock与latch区别")
+  
+  - 对于InnoDB存储引擎中的latch，可以通过命令SHOW ENGINE INNODB MUTEX来进行查看
+  
+  - lock信息查看：可以通过SHOW ENGINE INNODB STATUS及information_schema架构下的表INNODB_TRX、INNODB_LOCKS、INNODB_LOCK_WAITS来观察锁的信息。
+  
+  - InnoDB存储引擎实现了如下两种标准的行级锁：
+  
+    - 共享锁（S Lock），允许事物读一行数据
+  
+    - 排他锁（X Lock），允许事物删除或更新一行数据
+  
+      ``` html
+      如果一个事物T1已经获得了行r的共享锁，那么另外的事物T2可以立即获取r的共享锁，因为读取并没有改变r的数据，称这种情况为锁兼容（Lock Compatible）。但若有其他的事物T3想获得行r的排他锁，则其必须等待事物T1、T2释放行r的共享锁——这种情况称为锁不兼容。X锁与任何的锁都不兼容，而S锁仅和S锁兼容。需要特别注意的是，S和X都是行锁，兼容是指对统一记录（row）锁的兼容情况。
+      ```
+  
+  - InnoDB存储引擎支持意向锁设计比较简练，其意向锁即为表级别的锁。
+  
+    - 意向共享锁（IS Lock），事物想要获得一张表中某几行的共享锁
+    - 意向排他锁（IX Lock），事物想要获得一张表中某几行的排他锁![avatar](Innodb_lock_compatibility.png "InnDB存储引擎中锁的兼容性")
+    
+  - 通过SHOW ENGINE INNODB STATUS命令来查看当前锁清秋的信息
+  
+  - select * from information_schema.INNODB_TRX;
+  
+    ``` html
+    1.trx_id：唯一事务id号，只读事务和非锁事务是不会创建id的。
+    2.TRX_WEIGHT：事务的高度，代表修改的行数（不一定准确）和被事务锁住的行数。为了解决死锁，innodb会选择一个高度最小的事务来当做牺牲品进行回滚。已经被更改的非交易型表的事务权重比其他事务高，即使改变的行和锁住的行比其他事务低。
+    3.TRX_STATE：事务的执行状态，值一般分为：RUNNING, LOCK WAIT, ROLLING BACK, and COMMITTING.
+    4.TRX_STARTED：事务的开始时间
+    5.TRX_REQUESTED_LOCK_ID:如果trx_state是lockwait,显示事务当前等待锁的id，不是则为空。想要获取锁的信息，根据该lock_id，以innodb_locks表中lock_id列匹配条件进行查询，获取相关信息。
+    6.TRX_WAIT_STARTED：如果trx_state是lockwait,该值代表事务开始等待锁的时间；否则为空。
+    7.TRX_MYSQL_THREAD_ID：mysql线程id。想要获取该线程的信息，根据该thread_id，以INFORMATION_SCHEMA.PROCESSLIST表的id列为匹配条件进行查询。
+    8.TRX_QUERY：事务正在执行的sql语句。
+    9.TRX_OPERATION_STATE：事务当前的操作状态，没有则为空。
+    10.TRX_TABLES_IN_USE：事务在处理当前sql语句使用innodb引擎表的数量。
+    11.TRX_TABLES_LOCKED：当前sql语句有行锁的innodb表的数量。（因为只是行锁，不是表锁，表仍然可以被多个事务读和写）
+    12.TRX_LOCK_STRUCTS：事务保留锁的数量。
+    13.TRX_LOCK_MEMORY_BYTES：在内存中事务索结构占得空间大小。
+    14.TRX_ROWS_LOCKED：事务行锁最准确的数量。这个值可能包括对于事务在物理上存在，实际不可见的删除标记的行。
+    15.TRX_ROWS_MODIFIED：事务修改和插入的行数
+    16.TRX_CONCURRENCY_TICKETS：该值代表当前事务在被清掉之前可以多少工作，由 innodb_concurrency_tickets系统变量值指定。
+    17.TRX_ISOLATION_LEVEL：事务隔离等级。
+    18.TRX_UNIQUE_CHECKS：当前事务唯一性检查启用还是禁用。当批量数据导入时，这个参数是关闭的。
+    19.TRX_FOREIGN_KEY_CHECKS：当前事务的外键坚持是启用还是禁用。当批量数据导入时，这个参数是关闭的。
+    20.TRX_LAST_FOREIGN_KEY_ERROR：最新一个外键错误信息，没有则为空。
+    21.TRX_ADAPTIVE_HASH_LATCHED：自适应哈希索引是否被当前事务阻塞。当自适应哈希索引查找系统分区，一个单独的事务不会阻塞全部的自适应hash索引。自适应hash索引分区通过 innodb_adaptive_hash_index_parts参数控制，默认值为8。
+    22.TRX_ADAPTIVE_HASH_TIMEOUT：是否为了自适应hash索引立即放弃查询锁，或者通过调用mysql函数保留它。当没有自适应hash索引冲突，该值为0并且语句保持锁直到结束。在冲突过程中，该值被计数为0，每句查询完之后立即释放门闩。当自适应hash索引查询系统被分区（由 innodb_adaptive_hash_index_parts参数控制），值保持为0。
+    23.TRX_IS_READ_ONLY：值为1表示事务是read only。
+    24.TRX_AUTOCOMMIT_NON_LOCKING：值为1表示事务是一个select语句，该语句没有使用for update或者shared mode锁，并且执行开启了autocommit，因此事务只包含一个语句。当TRX_AUTOCOMMIT_NON_LOCKING和TRX_IS_READ_ONLY同时为1，innodb通过降低事务开销和改变表数据库来优化事务。
+    ```
+    
+   - select * from information_schema.INNODB_LOCKS;
+  
+     ``` htm
+     1.Lock_id:锁id
+     2.Lock_trx_id:拥有锁的事务id，可以和Innodb_trx表join得到事务的详细信息。
+     3.Lock_mode:锁的模式
+     4.Lock_type:锁的类型。Record代表行级锁，table表示表级锁
+     5.lock_table:被锁定的或者包含锁定记录的表的名称
+     6.Lock_index:当lock_type=’record’时，表示索引的名称；否则为null
+     7.Lock_space:当lock_type=’record’时，表示锁定行的表空间id；否则为null
+     8.Lock_page:当lock_type=’record’时，表示锁定行的页号；否则为null
+     9.Lock_rec:当lock_type=’record’时，表示一堆页面中锁定行的数量，即被锁定的记录号；否则为null
+     10.Lock_data:当lock_type=’record’时，表示锁定行的主键；否则为null
+     ```
+  
+     
+  
+
+
