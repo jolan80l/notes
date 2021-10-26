@@ -311,7 +311,28 @@
      10.Lock_data:当lock_type=’record’时，表示锁定行的主键；否则为null
      ```
   
-     
+- 一致性非锁定读：一致性的非锁定度（consistent nonlocking read）是指InnoDB存储引擎通过多版本控制（multi versioning）的方式来读取当前执行时间数据库中行的数据。如果读取的行正在执行DELETE或UPDATE操作，这时读取操作不会因此去等待行上锁的释放。相反地，InnoDB存储引擎会去读取行的一个快照数据。该实现是通过undo段来完成。而undo用来在事物中回滚数据，因此快照数据本身没有额外的开销。一个行记录可能有不止一个快照数据，一般称这种技术为行多版本技术。由此带来的并发控制，成为多版本并发控制（Multi Version Concurrency Contorl，MVCC）。
   
+- 在事物隔离级别READ COMMITED和REPEATABLE READ（InnoDB存储引擎默认事物隔离级别）下，InnoDB存储引擎使用非锁定的一致性读。在READ COMMITED事物隔离级别下，对于快照数据，非一致性读总是读取被锁定行的最新一份快照数据。而在REPEATABLE READ事物隔离级别下，对于快照数据，非一致性读总是读取事物开始时的行数据版本。
 
+    ```html
+    1.线程A开启事物，执行select id from t where id = 1，结果显示为1
+    2.线程B开启事物，执行update t set id = 3 where id = 1
+    3.在READ COMMITED和REPEATABLE READ两种事物隔离级别下，分别执行select id from t where id = 1，结果显示为1
+    4.提交线程B的事物
+    5.在READ COMMITED事物隔离级别下，执行select id from t where id = 1，没有结果集（因为此时id已经被修改为3）
+    5.在REPEATABLE READ事物隔离级别下，执行select id from t where id = 1，结果显示为1。因为REPEATABLE READ事物隔离级，非一致性读总是读取事物开始时的行数据版本
+    ```
 
+- 一致性锁定读：某些情况下，用户需要显示地对数据库读取操作进行加锁以保证数据逻辑的一致性。而这要求数据库支持加锁语句，即时是对SELECT的制度操作。InnoDB存储引擎对于SELECT语句支持两种一致性的锁定读（locking read）的操作。SELECT ... FOR UPDATE对读取的行记录加一个X锁，其他事物不能对已锁定的行加上任何锁。SELECT ... LOCK IN SHARE MODE对读取的行记录加一个S锁，其他事物可以被锁定的行加S锁，但是如果加X锁，则会被阻塞。SELECT ... FOR UPDATE，SELECT ... LOCK IN SHARE MODE必须在一个事物中，当事物提交了，锁也就释放了。
+
+  ```html
+  SELECT ... FOR UPDATE
+  SELECT ... LOCK IN SHARE MODE
+  ```
+  
+  
+  
+  
+  
+    
