@@ -1,3 +1,5 @@
+# 存储引擎介绍
+
 * MySQL数据库在5.5.8版本开始，InnoDB存储引擎是默认的存储引擎
 
 * InnoDB提供4种数据库隔离级别，默认为REPEATABLE级别
@@ -15,6 +17,8 @@
 * Federated存储引擎并不存放数据，他只指向一台远程MySQL数据库服务器上的表
 
 * Maria支持缓存数据和索引文件，应用了行锁设计，提供了MVCC功能，支持事物和非事物安全的选项，以及更好的BLOB字符类型的处理性能
+
+# InnoDB存储引擎
 
 * 通过SHOW ENGINES语句查看当前使用么MySQL数据库所支持的存储引擎
 
@@ -120,6 +124,8 @@
 
 - 刷新邻接页
 
+# 文件
+
 - 参数文件：MySQL启动时指定的参数的文件。mysql--help | grep my.cnf。select * from GLOBAL_VARIABLES WHERE VARIABLE_NAME LIKE 'innodb_buffer%';参数类型包括动态参数和静态参数。动态参数可以用过set命令动态指定，静态参数只能在数据库启动时生效。
 
 - 错误日志文件：SHOW VARIBLES LIKE 'log_error';
@@ -133,6 +139,8 @@
 - 区是由连续的页组成的空间，在任何情况下每个区的大小都为1MB。InnoDB存储引擎页的大小为16KB，即一个区中一共有64个连续的页。在InnoDB1.0.X之后引入了压缩页，所以一个区也可能有512、256、128个页。
 
 - InnoDB的行记录格式：略
+
+# 表
 
 - 创建触发器的命令是CREATE TRIGGER，只有具备Super权限的MySQL数据库用户才可以执行这条命令。最多可以为一个表建立6个触发器，即分别为INSERT、UPDATE、DELETE的BEFORE和AFTER各一个。
 
@@ -171,6 +179,8 @@
       - HASH和KEY分区的任何分区函数都会将含有NULL值的记录返回为0
     
 - MySQL5.6开始，支持分区或子分区中的数据与另一个非分区表中的数据进行交换：ALTER TABLE ... EXCHANGE PARTITION。ALTER TABLE e EXCHANGE PARTITION p0 WITH TABLE e2;
+
+# 索引与算法
 
 - 索引与算法
 
@@ -241,6 +251,8 @@
 - 覆盖索引：查询的所有列都在辅助索引上的索引叫覆盖索引。由于辅助索引叶子节点存储的是索引和聚集索引的书签，所以可能需要回表操作，但是如果需要查询的列全部在辅助索引上，则不需要回表操作。使用explain解释时，Extra字段为Using index表示使用了覆盖索引。
 
 - InnoDB存储引擎会行级别上对表数据上锁
+
+# 锁
 
 - 锁
 
@@ -330,9 +342,102 @@
   SELECT ... FOR UPDATE
   SELECT ... LOCK IN SHARE MODE
   ```
-  
-  
-  
-  
-  
+
+- 自增长与锁：对于自增长值的列的并发插入性能较差，事物必须等待前一个插入的完成（虽然不用等待事物的完成）。其次，对于INSERT...SELECT大大数据量的插入会影响插入的性能，因为另一个事物中的插入会被阻塞。InnoDB从MySQL 5.1.22版本开始，引入了innodb_autoinc_lock_mode来控制自增长模式。
+
+- 外键和锁：对于一个列的外键，如果没有显示地对这个列加索引，InnoDB存储引擎自动对其加一个索引，因为这样可以避免表锁。对于外键值的插入或更新，使用的是SELECT...LOCK IN SHARE MODE方式，即主动对父表加一个S锁。
+
+- InnoDB有三种行锁的算法：
+
+  - Record Lock：单个行记录上的锁
+
+  - Gap Lock：间隙锁，锁定一个范围，但不包含记录本身
+
+  - Next-Key Lock：Gap Lock+Record Lock，锁定一个范围，并且锁定记录本身
+
+- 在Next-Key Lock算法下，InnoDB对于行的查询都是采用这种锁定算法。例如一个索引有10，11，13，20这四个值，那么该索引可能被Next-key Lock的区间为：(-∞,10]  (10,11]  (11,13]  (13,20]   (20,+∞)。
+
+    - 当查询的索引含有唯一属性时，InnoDB存储引擎会对Next-Key Lock进行优化，将其降级为Record Lock，即仅锁住索引本身，而不是范围。
     
+      | 时间 | 会话A                                 | 会话B                          |
+      | ---- | ------------------------------------- | ------------------------------ |
+      | 1    | BEGIN;                                |                                |
+      | 2    | SELECT * FROM t WHERE a=5 FOR UPDATE; |                                |
+      | 3    |                                       | BEGIN;                         |
+      | 4    |                                       | INSERT INTO t SELECT 4;        |
+      | 5    |                                       | COMMIT;<br />#成功，不需要等待 |
+      | 6    | COMMIT                                |                                |
+    
+    - 若是辅助索引，则情况完全不同。辅助索引加上的是Next-Key Lock，并且InnoDB存储引擎还会对辅助索引下一个键值加上gap lock。举例如下，先创建测试表z
+    
+      ```sql
+      CREATE TABLE z (a INT, b INT, PRIMARY KEY(a), KEY(b));
+      INSERT INTO z SELECT 1,1;
+      INSERT INTO z SELECT 3,1;
+      INSERT INTO z SELECT 5,3;
+      INSERT INTO z SELECT 7,6;
+      INSERT INTO z SELECT 10,8;
+      ```
+    
+      在会话A中执行sql语句：SELECT * FROM z WHERE b = 3 FOR UPDATE，此时对辅助索引加上的是Next-key Lock，锁定的范围是(1,3)，并且对下一个范围加间隙锁。所以此时执行如下几个sql都会阻塞：
+    
+      ```sql
+      #在会话A中执行的SQL语句已经对聚集索引中的a=5的值加上X锁，因此会被阻塞
+      SELECT * FROM z WHERE a = 5 LOCK IN SHARE MODE;
+      #插入主键4没有问题，但是插入的辅助索引2在锁定的范围(1,3)中，因此会被阻塞
+      INSERT INTO z SELECT 4,2;
+      #插入主键6没有锁定，5也不在范围(1,3)之间，但插入的值5在另一个锁定的范围(3,6)中，因此会被阻塞
+      INSERT INTO z SELECT 6,5;
+      ```
+    
+      下面的SQL语句不会被阻塞，可以立即执行
+    
+      ```SQL
+      INSERT INTO z SELECT 8,6;
+      INSERT INTO z SELECT 2,0;
+      INSERT INTO z SELECT 6,7;
+      ```
+    
+- 在InnoDB存储引擎中，对于INSERT的操作，其会检查插入记录的下一条记录是否被锁定，若已经被锁定，则不允许查询。
+  
+- 阻塞：因为不同锁之间的兼容性关系，在有些时刻一个事物中的锁需要等待另一个事物中的锁释放它所占用的资源，这就是阻塞。阻塞并不是一件坏事，其是为了确保事物可以并发且正常地运行。在InnoDB存储引擎中，参数innodb_lock_wait_timeout用来控制等待的时间（默认是50秒），innodb_rollback_on_timeout用来设定是否在等待超时对进行中的事物进行回滚操作（默认是OFF，代表不回滚）。参数innodb_lock_wait_timeout是动态的，可以在MySQL数据库运行时进行调整：SET @@innodb_lock_wait_timeout=60;而innodb_rollback_on_timeout是静态的，不可在启动时进行修改。
+
+- 死锁：死锁是指两个或两个以上的事物在执行过程中，因争夺资源而造成的一种互相等待的现象。若无外力作用，事物都将无法推进下去。
+
+    - 解决死锁最简单的一种方法是超时，即当两个事物互相等待时，当一个等待时间超过设置的某一阈值时，其中一个事物进行回滚，另一个等待的事物就能进行。在InnoDB存储引擎中，参数innodb_lock_wait_timeout用来设置超时的时间。
+
+    - 超时机制虽然简单，但是其仅通过超时后对事物进行回滚的方式处理，或者说其是通过FIFO的顺序选择回滚对象。但若超时的事物所占权重比较大，如事物操作更新了很多行，占用了较多的undo log，这是采用FIFO的方式，就显得不合适了，因为回滚了这个事物的时间相对另一个事物所占用的时间可能会很多。因此，除了超时机制，当前数据库还都普遍采用wait-for-graph（等待图）的方式来进行死锁检测。InnoDB存储引擎也采用这种方式。wait-for-graph要求数据库保存一下两种信息：1.锁的信息链表；2.事物等待链表。通过上述链表可以构造一个图，而在这个图中若存在回路，就代表存在死锁，因此资源之间互相等待。在wait-for-graph中，事物为图中的节点，而在图中，事物T1指向T2边的定义为：1.事物T1等待事物T2所占用的资源；2.事物T1最终等待T2所占用的资源，也就是事物之间在等待相同的资源，而事物T1发生在事物T2的后面。
+
+    - wait-for-graph是一种较为主动的死锁检测机制，在每个事物请求并发生等待时都会判断是否存在回路，若存在则有死锁，通常来说InnoDB存储引擎选择回滚undo量最小的事物。
+
+    - 系统中任何一个事物发生死锁的概率 ≈ n<sup>2</sup>r<sup>4</sup>/4R<sup>2</sup>。其中n、r、R的含义是：
+
+      - 系统中事物的数量（n），数量越多发生死锁的概率越大
+
+      - 每个事物操作的数量（r），每个事物操作的数量越多，发生死锁的概率越大
+
+      - 操作数量的几个（R），越小则发生死锁的概率越大
+
+  - 死锁的示例：
+  
+    | 时间 | 会话A                                            | 会话B                                                        |
+    | ---- | ------------------------------------------------ | ------------------------------------------------------------ |
+    | 1    | BEGIN;                                           |                                                              |
+    | 2    | SELECT * FROM t WHERE a=1 FOR UPDATE;            | BEGIN;                                                       |
+    | 3    |                                                  | SE;ECT * FROM t WHERE a=2 FOR UPDATE;                        |
+    | 4    | SELECT * FROM t WHERE a=2 FOR UPDATE;<br />#等待 |                                                              |
+    | 5    |                                                  | SELECT * FROM t WHERE a=1 FOR UPDATE;<br />ERROR 1213(40001):Deadlock found when trying to get lock;try restarting transaction |
+  
+  - 发现死锁后，InnoDB存储引擎会马上回滚一个事物，这点是需要注意的。因此如果应用程序中捕获了1213这个错误，其实并不需要对其进行回滚
+
+# 事物
+
+- 事物的分类
+  - 扁平事物：在扁平事物中，所有操作都处于同一层次，其由BEGIN WORK开始，由COMMIT WORK或ROLLBACK WORK结束，其间的操作是原子的，要么都执行，要么都回滚
+    - BEGIN WORK;Operation 1...Operation n;Commit WORK;
+    - BEGIN WORK;Operation 1...Operation n;ROLLBACK WORK;
+    - BEGIN WORK;Operation 1...Operation n;因外界原因回滚，如超时等;
+  - 带有保存点的扁平事物：除扁平事物，允许在事物执行过程中回滚到同一事物中较早的一个状态。保存点用来通知系统应该记住事物当前的状态，以便当之后发生错误后时，事物能回到保存点当时的状态。
+  - 链事物：可视为保存点模式的一种变种。带有保存点的扁平事物，当发生系统崩溃时，所有的保存点豆浆消失。而链式事物的思想是：在提交一个事物时，释放不需要的数据对象，将必要的处理上下文隐式地传给下一个要开始的事物。注意，提交事物操作和开始下一个事物操作将合并为一个原子操作。这意味着下一个事物将看到上一个事物的结果，将好像在一个事物中进行的一样。
+  - 嵌套事物：MySQL不支持
+  - 分布式事物：通畅是一个在分布式环境下运行的扁平事物，因此需要根据数据库所在位置访问网络中的不同节点。
