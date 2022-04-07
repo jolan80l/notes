@@ -172,9 +172,39 @@ HEAD类似于GET
 
 ##### HTTP响应报文
 
+HTTP/1.1 200 OK
+Connection：close
+Date:Thu,18 Aug 2015 15:44:04 GMT
+Server: Apache/2.2.3(CentOS)
+Last-Modified: Thu,18 Aug 2015 15:11:03 GMT
+Content-Length:6821
+Content-Type:text/html
+
+(data data data ...)
+
+响应报文它分为三个部分：
+
+一个初始状态行（status line），6个首部行（header line），然后是实体体（entity body）。
+
+- 状态行：有3个字段。协议版本字段、状态码和响应状态信息。
+- Connection：close首部行告诉客户，发送完报文后将关闭TCP连接
+- Date：指示服务器产生并发送该响应报文的日期和时间。该时间是组织响应报文的时间，不是对象修改时间
+- Server：指示该报文是有一台Apache Web服务器产生的
+- Last-Modified：指示了该对象创建或最后修改的日期和时间
+- Content-Length：指示了被发送对象中的字节数
+- Content-Type：指示了该实体对象是HTML文本
+
+
+
 ![avatar](img/6.png)
 
+状态码及其相应的短语指示了请求的结果：
 
+200 Ok:请求成功，信息包含在返回的报文中
+301 Moved permanently:请求的对象已经被永久转移了，新的URL定义在响应报文的Location
+400 Bad Request：一个通常差错代码，指请求不能被服务器理解。
+404 Not Found: 被请求的文档不在服务器上。
+505 Http version Not Supported：服务器不支持请求的报文使用的HTTP协议版本。
 
 
 
