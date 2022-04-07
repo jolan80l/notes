@@ -139,7 +139,40 @@ RTT：Round-Trip Time，即客户端从发送请求到接收响应的往返时�
 
 HTTP1.1持续连接的情况下，服务器在发送响应后保持该TCP连接打开。在相同的客户与服务器之间，后续的请求和响应报文能够通过相同的连接进行传送。
 
+#### HTTP报文格式
 
+##### HTTP请求报文
+
+GET /somedir/page.html HTTP/1.1
+Host:www.someschool.edu
+Connection:close
+User-agent:Mozilla/5.0
+Accept-language:fr
+
+一个请求报文能够具有更多的行或者至少具有一行。
+
+其中第一行叫做请求行（request line），后继的行叫做首部行（header line）。
+
+- 请求行有三个字段：方法字段、URL字段和HTTP版本字段。其中方法字段包括GET、POST、HEAD、PUT和DELETE。URL字段带有请求对象的标识。
+
+- 首部行HOST：指明了对象所在的主机
+- 首部行Connection：close标识不使用持续连接
+- 首部行User-agent：指明用户代理，这里Mozilla/5.0标识是firefox浏览器
+- 首部行Accept-language：用户想得到该对象的语法版本，否则服务器将发送默认版本
+
+当用户使用POST方法时才使用下图中的实体体（entity body），GET方法不会使用。
+
+HEAD类似于GET
+
+当用户提交对象到服务器的指定路径（目录）时使用PUT
+
+当用户删除服务器对象是使用DELETE
+
+![avatar](img/5.png)
+
+##### HTTP响应报文
+
+![avatar](img/6.png)
 
 
 
