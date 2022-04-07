@@ -144,9 +144,13 @@ HTTP1.1持续连接的情况下，服务器在发送响应后保持该TCP连接�
 ##### HTTP请求报文
 
 GET /somedir/page.html HTTP/1.1
+
 Host:www.someschool.edu
+
 Connection:close
+
 User-agent:Mozilla/5.0
+
 Accept-language:fr
 
 一个请求报文能够具有更多的行或者至少具有一行。
@@ -173,11 +177,17 @@ HEAD类似于GET
 ##### HTTP响应报文
 
 HTTP/1.1 200 OK
+
 Connection：close
+
 Date:Thu,18 Aug 2015 15:44:04 GMT
+
 Server: Apache/2.2.3(CentOS)
+
 Last-Modified: Thu,18 Aug 2015 15:11:03 GMT
+
 Content-Length:6821
+
 Content-Type:text/html
 
 (data data data ...)
@@ -201,12 +211,69 @@ Content-Type:text/html
 状态码及其相应的短语指示了请求的结果：
 
 200 Ok:请求成功，信息包含在返回的报文中
+
 301 Moved permanently:请求的对象已经被永久转移了，新的URL定义在响应报文的Location
+
 400 Bad Request：一个通常差错代码，指请求不能被服务器理解。
+
 404 Not Found: 被请求的文档不在服务器上。
+
 505 Http version Not Supported：服务器不支持请求的报文使用的HTTP协议版本。
 
+#### cookie
 
+cookie有4个组件：
+
+- 在HTTP响应报文中的一个cookie首部行
+- 在HTTP请求报文中的一个cookie首部行
+- 在用户端系统中保留有一个cookie文件，并由浏览器进行管理
+- 维语Web站点的一个后端数据库
+
+![avatar](img/7.jpg)
+
+#### Web缓存器
+
+Web缓存器（Web cache）也叫代理服务器（proxy server）。Web缓存器有自己的磁盘存储空间，并在存储空间中保存最近请求过的对象的副本。
+
+假定浏览器正在访问http://www.someschool.edu/campus.gif
+
+1）浏览器创建一个到Web缓存器的TCP连接，并向Web缓存器中的对象发送一个HTTP请求
+
+2）Web缓存器进行检查，我的本地是不是存储过你要请求的对象的副本，如果有的话就不用再向origin server申请了，直接将副本通过HTTP响应报文返回该对象
+
+3）如果没有这个对象的话，它就打开一个与origin server的TCP连接。此时Web缓存器就成为了客户了，向origin server发送报文请求，然后origin server将对象发送给Web缓存器
+
+4）当Web缓存器接受到对象之后，就会在本地存储空间存储一份副本，然后向客户的浏览器用 HTTP响应报文发送这个副本
+
+```html
+如何搭建一个缓存服务器：https://blog.csdn.net/kaifangzhilu/article/details/6556505
+```
+
+#### 条件GET方法
+
+如何检查Web缓存器上的对象是否过期？HTTP协议有一种机制——条件GET（conditional GET）。它有以下两个条件：
+
+1）请求报文使用GET方法
+
+2）请求报文中包含一个"If-Modified-Since:"的首部行
+
+首先客户端向服务器进行第一次HTTP请求，服务器向客户进行响应，从上文中的HTTP响应报文的格式可知，响应报文中会带有一个Date的首部行。当客户端再一次请求服务器时，可以增加If-Modified-Since首部行来表示这是一个条件GET方法，其中If-Modified-Since首部行的值是第一次响应报文中的Date首部行的值，如下所示：
+
+GET /fruit/kiwi.gif HTTP/1.1
+
+Host: www.exotiquecuisine.com
+
+If-Modified-Since: Wed, 9 Sep 2015 09:23:24
+
+Web缓存服务器会请求origin server，如果对象没有被修改过，origin server会返回Web服务器如下报文
+
+HTTP / 1.1 304 Not Modified
+
+Date: Sat, 10 Oct 2015 15:39:29
+
+Server: Apache / 1.3.0 (Unix)
+
+(empty entity body)
 
 
 
