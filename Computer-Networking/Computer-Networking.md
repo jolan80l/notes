@@ -275,11 +275,38 @@ Server: Apache / 1.3.0 (Unix)
 
 (empty entity body)
 
+### 电子邮件
+
+![avatar](img/8.png)
 
 
 
+电子邮件系统有3个主要组成部分：用户代理（user agent）、邮件服务器（mail server）、简单邮件传输协议（Simple Mail Transfer Protocol, SMTP）。
 
+用户代理允许用户阅读、回复、转发、保存报文。如Outlook和Apple Mail等。
 
+如张三发邮件给李四，张三需要先在用户代理上撰写报文，然后邮件代理向邮件服务器发送邮件，此时邮件放在邮件服务器的外出报文队列（message queue）中。当李四要阅读报文时，他的用户代理在其邮件服务器的邮箱中获得该报文。每个接收方在其中的某个邮件服务器上有一个邮箱（mailbox），邮箱管理和维护发送给他的报文。
+
+SMTP是邮件中主要的应用层协议。它使用TCP可靠数据传输服务。
+
+![avatar](img/9.png)
+
+- Alice 调用她的邮件代理程序并提供 Bob 的邮件地址，撰写报文，然后指示用户代理发送该报文。
+- Alice 的用户代理把报文发给她的邮件服务器，在那里该报文被放在报文队列中。
+- 运行在 Alice 的邮件服务器上的 SMTP 客户端发现了报文队列中的这个报文，它就创建一个到运行在 Bob 的邮件服务器上的 SMTP 服务器的 TCP 连接。
+- 在经过一些初始 SMTP 握手后，SMTP 客户通过该 TCP 连接发送 Alice 的报文。
+  在 Bob 的邮件服务器上，SMTP 的服务器端接收该报文。Bob 的邮件服务器然后将该报文放入 Bob 的邮箱中。
+- 在 Bob 方便的时候，他调用用户代理阅读该报文。
+
+#### 邮件报文格式
+
+一个From:首部行，一个To:首部行，可能包含Subject:首部行或其他可选首部行。紧接着一个空白行，然后是以ACSII格式表示的报文体。
+
+From: alice@crepes.fr
+
+To: bob@hamburger.edu 
+
+Subject: Searching for the meaning of life. 
 
 
 
