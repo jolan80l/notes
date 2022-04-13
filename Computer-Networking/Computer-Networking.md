@@ -308,6 +308,32 @@ To: bob@hamburger.edu
 
 Subject: Searching for the meaning of life. 
 
+#### 邮件访问协议
+
+SMTP是一个推协议，用户需要需要一种特殊的协议进行拉取操作，包括第三版的邮局协议（Post Office Ptotocol-Version 3，POP3）、因特网邮件访问协议（Internet Mail Access Protocol, IMAP）以及HTTP。
+
+### DNS: 因特网的目录服务
+
+一般可以通过主机名（如www.facebook.com）或IP地址（如121.7.106.83）对主机进行标识。人们习惯用主机名的标识方式，而路由器擅长分析定长、有层次结构的IP地址。为了折中这些不同的偏好，需要一种能进行主机名到IP地址转换的目录服务。这就是域名系统（Domain Name System, DNS）的主要任务。
+
+DNS是一个由分层的DNS服务器（DNS server）实现的分布式数据库，也是一个使得主机能够查询分布式数据库的应用层协议。DNS协议运行在UDP之上，使用53端口号。如用户访问URL www.someschool.edu/index.html的例子，必须需要获取用户主机名对应的IP地址，其做法如下：
+
+1）同一台用户主机上运行着DNS应用的客户端。
+
+2）浏览器从上述 URL中抽取出主机名 www.someschool.edu，并将这台主机名传给DNS应用的客户端。
+
+3）DNS客户向DNS服务器发送一个包含主机名的请求。
+
+4）DNS客户最终会收到一份回答报文，其中含有对应于该主机名的 IP地址。
+
+5）一旦浏览器接收到来自 DNS 的该IP地址，它能够向位于该IP 地址 80 端口的HTTP服务器进程发起一个TCP连接。
+
+从这个例子中可以看出，DNS给访问互联网带来了额外的时延，
+
+
+
+
+
 
 
 
