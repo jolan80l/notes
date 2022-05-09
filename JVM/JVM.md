@@ -471,3 +471,127 @@ public class JVM3_8_2 {
  */
 ```
 
+### 长期存活的对象将进入老年代
+
+HotSpot虚拟机中多数收集器都采用了分代收集来管理堆内存， 那内存回收时就必须能决策哪些存活对象应当放在新生代， 哪些存活对象放在老年代中。 为做到这点， 虚拟机给每个对象定义了一个对象年龄（Age） 计数器， 存储在对象头中 。 对象通常在Eden区里诞生， 如果经过第一次Minor GC后仍然存活， 并且能被Survivor容纳的话， 该对象会被移动到Survivor空间中， 并且将其对象年龄设为1岁。 对象在Survivor区中每熬过一次Minor GC， 年龄就增加1岁， 当它的年龄增加到一定程度（默认为15） ， 就会被晋升到老年代中。 对象晋升老年代的年龄阈值， 可以通过参数**-XX：MaxTenuringThreshold**设置
+
+```java
+package com.jolan.jvm.example;
+
+public class JVM3_8_3 {
+    private static final int _1MB = 1024 * 1024;
+
+    /**
+     * VM参数：-verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=1 -XX:+PrintTenuringDistribution -XX:+UseSerialGC
+     *      
+     */
+    public static void testTunuringThreshold(){
+        byte[] allocation1, allocation2, allocation3;
+        allocation1 = new byte[_1MB / 4]; //什么时候进入老年代决定于XX:MaxTenuringThreshold的设置
+        allocation2 = new byte[4 * _1MB];
+        allocation3 = new byte[4 * _1MB];
+        allocation3 = null;
+        allocation3 = new byte[4 * _1MB];
+    }
+
+    public static void main(String[] args) {
+        testTunuringThreshold();
+    }
+}
+
+/**
+当MaxTenuringThreshold = 1 时
+[GC (Allocation Failure) [DefNew
+Desired survivor size 524288 bytes, new threshold 1 (max 1)
+- age   1:     914896 bytes,     914896 total
+: 6515K->893K(9216K), 0.0038951 secs] 6515K->4989K(19456K), 0.0039487 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (Allocation Failure) [DefNew
+Desired survivor size 524288 bytes, new threshold 1 (max 1)
+- age   1:        872 bytes,        872 total
+: 5073K->0K(9216K), 0.0017636 secs] 9169K->4986K(19456K), 0.0017966 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+Heap
+ def new generation   total 9216K, used 4234K [0x00000000fec00000, 0x00000000ff600000, 0x00000000ff600000)
+  eden space 8192K,  51% used [0x00000000fec00000, 0x00000000ff0227c8, 0x00000000ff400000)
+  from space 1024K,   0% used [0x00000000ff400000, 0x00000000ff400368, 0x00000000ff500000)
+  to   space 1024K,   0% used [0x00000000ff500000, 0x00000000ff500000, 0x00000000ff600000)
+ tenured generation   total 10240K, used 4985K [0x00000000ff600000, 0x0000000100000000, 0x0000000100000000)
+   the space 10240K,  48% used [0x00000000ff600000, 0x00000000ffade5b0, 0x00000000ffade600, 0x0000000100000000)
+ Metaspace       used 3454K, capacity 4496K, committed 4864K, reserved 1056768K
+  class space    used 379K, capacity 388K, committed 512K, reserved 1048576K
+  
+  
+当MaxTenuringThreshold = 15 时
+[GC (Allocation Failure) [DefNew
+Desired survivor size 524288 bytes, new threshold 1 (max 15)
+- age   1:     942416 bytes,     942416 total
+: 6515K->920K(9216K), 0.0055743 secs] 6515K->5016K(19456K), 0.0057039 secs] [Times: user=0.00 sys=0.02, real=0.01 secs] 
+[GC (Allocation Failure) [DefNew
+Desired survivor size 524288 bytes, new threshold 15 (max 15)
+: 5016K->0K(9216K), 0.0015704 secs] 9112K->5012K(19456K), 0.0015994 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+Heap
+ def new generation   total 9216K, used 4178K [0x00000000fec00000, 0x00000000ff600000, 0x00000000ff600000)
+  eden space 8192K,  51% used [0x00000000fec00000, 0x00000000ff014930, 0x00000000ff400000)
+  from space 1024K,   0% used [0x00000000ff400000, 0x00000000ff400000, 0x00000000ff500000)
+  to   space 1024K,   0% used [0x00000000ff500000, 0x00000000ff500000, 0x00000000ff600000)
+ tenured generation   total 10240K, used 5012K [0x00000000ff600000, 0x0000000100000000, 0x0000000100000000)
+   the space 10240K,  48% used [0x00000000ff600000, 0x00000000ffae5168, 0x00000000ffae5200, 0x0000000100000000)
+ Metaspace       used 3471K, capacity 4496K, committed 4864K, reserved 1056768K
+  class space    used 381K, capacity 388K, committed 512K, reserved 1048576K
+ */
+```
+
+
+
+1）Eden区大小为8192K
+
+2）allocation1占用空间为256K
+
+3）allocation2占用空间为4096K
+
+4）allocation3占用空间也为4096K
+
+5）三个变量总共需占用空间8448K
+
+6）所以在第一次执行allocation3 = new byte[4 * _1MB]时Eden空间不足，需要进行一次垃圾回收
+
+: 6515K->893K(9216K), 0.0038951 secs] 6515K->4989K(19456K), 0.0039487 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+
+GC： 代表发生了一次垃圾回收，前面没有Full修饰，表明这时一次Minor GC；
+
+Allocation Failure：表明本次引起GC的原因是因为在年轻代中没有足够的空间能够存储新的数据了。
+
+6515K->893K(9216K) 三个参数分别为：GC前该内存区域(这里是年轻代)使用容量，GC后该内存区域使用容量，该内存区域总容量。
+
+6515K->4989K(19456K) 三个参数分别为：堆区垃圾回收前的大小，堆区垃圾回收后的大小，堆区总大小。
+
+0.0039487 secs:代表本次新生代GC耗时
+
+那么我们本次日志得出的结论：
+
+该次GC新生代减少了 6515K- 893K= 5622K
+Heap区总共减少了 6515K- 4989K= 1526K
+5622K- 1526K= 4096K 代表一共有 4096KB对象从年轻代转移到了老年代
+
+![avator](img/8.png)
+
+allocation1对象和allocation2对象都是强引用不会被回收，所以肯定会直接放入幸存者区域，allocation1对象可以放入，但是allocation2对象太大是无法放入S1区的，因此根据垃圾收集器的默认担保机制，allocation2对象会直接进入到我们的老年代进行存放。 这也解释了为什么最终有4096K（4MB）大小的对象进入了老年代
+
+当第一次GC完后Eden区就有足够的空间存放 allocation3对象了。
+
+7）当执行最后一行时，Eden区域空间不足，需要再次触发Minor GC
+
+: 5073K->0K(9216K), 0.0017636 secs] 9169K->4986K(19456K), 0.0017966 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+
+新生代减少了5073K - 0K = 5073K
+
+Heap区总共减少了 9169K - 4986K= 4183K
+
+5073K - 4183KB = 890 K。代表一共有 890 KB对象从年轻代转移到了老年代。这890KB的存活对象和第一次垃圾收集后新生代存活对象的大小基本相同（图片和文字描述数据略有差距）
+
+![avator](img/9.png)
+
+### 动态对象年龄判断
+
+动态对象年龄判定,是根据Survivor空间中相同年龄所有对象大小的总和大于Survivor空间的一半，年龄大于或等于该年龄的对象就可以直接进入老年代，无须等到-XX：MaxTenuringThreshold要求的年龄
+
+在上面的例子中，当设置-XX：MaxTenuringThreshold等于15时，第二次垃圾收集后的结果仍然将新生代空间清空了，原因就是第一次垃圾收集后的剩余对象综合已经大于1024K的一半也就是512K，并且他们是同年龄的。
