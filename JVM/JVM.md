@@ -1,9 +1,9 @@
-# 第一章 走进Java
+# 第1章 走进Java
 - JDK是用于支持Java程序开发的最小环境
 - JRE是支持Java程序运行的标准环境
 - JDK7是可以支持Windows XP操作系统的最后一个版本
 - Oracle再迫使商业用户要么不断升级JDK的版本，要么就去购买商业支持
-# 第二章 内存区域与内存溢出异常
+# 第2章 内存区域与内存溢出异常
 ![avator](img/1.jpg)
 ## 程序计数器
 <p>程序计数器（Program Counter Register）是一块较小的内存空间，它可以看作是当前线程所执行的字节码的行号指示器。分支、循环、跳转、异常处理、线程恢复等基础功能都需要依赖这个计数器来完成。</p>
@@ -113,7 +113,7 @@ JDK1.8之后，永久代完全被元空间替代，JVM参数如下：
 
 直接内存导致的内存溢出，一个明显的特征书在Heap Dump文件中不会看见有什么明显的异常情况，如果读者发现内存溢出之后产生的Dump文件很小，而程序中有直接或者间接用了DirectMemory（如NIO），那就可以考虑重点检查一下直接内存方面的原因了。
 
-# 第三章 垃圾收集器与内存分配策略
+# 第3章 垃圾收集器与内存分配策略
 
 ## 可达性分析算法
 
@@ -595,3 +595,120 @@ Heap区总共减少了 9169K - 4986K= 4183K
 动态对象年龄判定,是根据Survivor空间中相同年龄所有对象大小的总和大于Survivor空间的一半，年龄大于或等于该年龄的对象就可以直接进入老年代，无须等到-XX：MaxTenuringThreshold要求的年龄
 
 在上面的例子中，当设置-XX：MaxTenuringThreshold等于15时，第二次垃圾收集后的结果仍然将新生代空间清空了，原因就是第一次垃圾收集后的剩余对象综合已经大于1024K的一半也就是512K，并且他们是同年龄的。
+
+### 空间分配担保
+
+在JDK6 UPDATE 24之前：
+
+在发生Minor GC之前，虚拟机必须先检查老年代最大可用的连续空间是否大于新生代所有对象总空间，如果这个条件成立，那这一次Minor GC可以确保是安全的。如果不成立，则虚拟机会先查看-XX：HandlePromotionFailure参数的设置值是否允许担保失败（HandlePromotion Failure）；如果允许，那会继续检查老年代最大可用的连续空间是否大于历次晋升到老年代对象的平均大小，如果大于，将尝试进行一次Minor GC，尽管这次Minor GC是有风险的；如果小于，或者-XX：HandlePromotionFailure设置不允许冒险，那这时就要改为进行一次FullGC。
+
+在JDK 6 Update 24之后：
+（1）JDK 6 Update 24之后不再使用-XX：HandlePromotionFailure参数。
+（2）JDK 6 Update 24之后的规则变为只要老年代的连续空间大于新生代对象总大小或者历次晋升的平均大小，就会进行Minor GC，否则将进行Full GC。
+
+```java
+package com.jolan.jvm.example;
+
+public class JVM3_8_5 {
+    private static final int _1MB = 1024 * 1024;
+
+    /**
+     * VM参数：-verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8 -XX:-HandlePromotionFailure -XX:+UseSerialGC
+     *      
+     */
+    public static void testHandlePromotion(){
+        byte[] allocation1, allocation2, allocation3, allocation4, allocation5, allocation6, allocation7;
+        allocation1 = new byte[2 * _1MB];
+        allocation2 = new byte[2 * _1MB];
+        allocation3 = new byte[2 * _1MB];
+        allocation1 = null;
+        allocation4 = new byte[2 * _1MB];
+        allocation5 = new byte[2 * _1MB];
+        allocation6 = new byte[2 * _1MB];
+        allocation4 = null;
+        allocation5 = null;
+        allocation6 = null;
+        allocation7 = new byte[2 * _1MB];
+    }
+
+    public static void main(String[] args) {
+        testHandlePromotion();
+    }
+}
+
+/**
+jdk1.8无法识别HandlePromotionFailure
+Error: Could not create the Java Virtual Machine.
+Error: A fatal exception has occurred. Program will exit.
+Unrecognized VM option 'HandlePromotionFailure'
+Did you mean '(+/-)PromotionFailureALot'?
+
+ */
+```
+
+# 第4章 虚拟机性能监控、故障处理工具
+
+## jps：虚拟机进程状况工具
+
+jps（JVM Process Status Tool）可以列出正在运行的虚拟机进程，并显示虚拟机执行主类（Main Class, main()函数所在的类）名称以及这些进程的本地虚拟机唯一ID（LVMID, Local Virtual Machine Identifier）。
+
+jps命令格式：jps [options] [hostid]
+
+jps执行样例：jps -l
+
+![avator](img/10.jpg)
+
+## jstat：虚拟机统计信息监视工具
+
+jstat（JVM Statistics Monitoring Tool）用于监视虚拟机各种运行状态信息的命令行工具。它可以显示本地或者远程虚拟机进程中的类加载、内存、垃圾收集、即时编译等运行是数据。
+
+jstat命令格式为：
+
+jstat [option vmid [interval [s|ms] [count]] ]
+
+如果是本地虚拟机进程，VMID与LVMID是一直的；如果是远程虚拟机进程，那VMID的格式应当是：
+
+![avator](img/11.jpg)
+
+参数interval和count代表查询间隔和次数，如果省略这2个参数，说只查询一次。假设需要每250毫秒查询一次进程2764垃圾收集状况，一共查询20次，那命令应当是：jstat -gc 2764 250 20
+
+![avator](img/12.jpg)
+
+## jinfo：Java配置信息工具
+
+jinfo（Configuration Info for Java）的作用是实时查看和调整虚拟机各项参数。
+
+jinfo命令格式：jinfo [ option ] pid
+
+执行样例：查询CMSInitatingOccupancyFraction参数值
+
+jinfo -flag CMSInitatingOccupancyFraction 1444 
+
+-XX:-CMSInitatingOccupancyFraction=85
+
+## jmap：Java内存映射工具
+
+jmap（Memory Map for Java）命令用于生成堆转储快照（一般称为heapdump或dump文件）。jmap的作用不仅仅是为了获取堆转储快照，它还可以查询finalize执行队列、Java堆和方法区的详细信息，如空间使用率、当前用的是哪种收集器等。
+
+jmap命令格式：jmap [ option ] vmid
+
+![avator](img/13.png)
+
+```html
+jmap -dump:format=b,file=eclipse.bin 3500
+Dumping heap to C:Users\IcyFenix\eclipse.bin...
+Heap dump file created
+```
+
+## jhat：虚拟机堆转储快照分析工具
+
+JDK提供jhat（JVM Heap Analysis Tool）命令与jmap搭配使用，来分析jmap生成的堆转储快照。jhat内置了一个微型的HTTP/Web服务器，生成堆转储快照的分析结果后，可以在浏览器查看。
+
+## jstack：Java堆栈跟踪工具
+
+jstack（Stack Trace for Java）命令用于生成虚拟机当前时刻的线程快照（一般称为threaddump或者javacore文件）。线程快照就是当前虚拟机内每一条线程正在执行的方法堆栈的集合，生成线程快照的目的通常是定位线程出现长时间停顿的原因，如线程间死锁、死循环、请求外部资源导致的长时间挂起等。
+
+jstack命令格式：jstack [ option ] vmid
+
+![avator](img/14.jpg)
+
