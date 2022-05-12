@@ -712,3 +712,236 @@ jstack命令格式：jstack [ option ] vmid
 
 ![avator](img/14.jpg)
 
+## JHSDB：基于服务性代理的调试工具
+
+JHSDB是一款基于服务性代理（Serviceability Agent, SA）实现的进程外调试工具。服务性代理是HotSpot虚拟机中一组用于映射Java虚拟机运行信息的、主要基于Java语言（含少量JNI代码）实现的API集合。通过服务性代理的API，可以在一个独立的Java虚拟机的进程里分析其他HotSpot虚拟机的内部数据，或者从HotSpot虚拟机进程中dump出来的转储快照里还原出它的运行状态细节。
+
+```java
+package com.jolan.jvm.example;
+
+public class JHSDB_TestCase {
+    /**
+     * vm参数： -Xmx10m -XX:+UseSerialGC -XX:-UseCompressedOops
+     */
+    static class Test{
+        static ObjectHolder staticObj = new ObjectHolder();
+        ObjectHolder instanceObj = new ObjectHolder();
+        void foo(){
+            ObjectHolder localObj = new ObjectHolder();
+            System.out.println("done");//这里设一个端点
+        }
+
+        private static class ObjectHolder{}
+
+        public static void main(String[] args) {
+            Test test = new JHSDB_TestCase.Test();
+            test.foo();
+        }
+    }
+}
+```
+
+首先通过jps工具查看程序的进程ID
+
+![avator](img/15.jpg)
+
+使用一下命令进入JHSDB的图形化模式，并使其附加进程17304
+
+jhsdb hsdb --pid 17304
+
+在jdk1.8中发现jhsdb命令无法直接使用。首先将jdk目录下的sawindbg.dll拷贝到jre目录下，然后打开java安装目录，在其\jdk1.8.0_144\lib目录下打开命令行，执行如下命令：java -cp .\sa-jdi.jar sun.jvm.hotspot.HSDB
+
+![avator](img/16.jpg)
+
+![avator](img/17.jpg)
+
+![avator](img/18.jpg)
+
+![avator](img/19.jpg)
+
+![avator](img/20.jpg)
+
+![avator](img/21.jpg)
+
+上图可以看到三个对象的地址范围，它们都落在了Eden的范围
+
+![avator](img/22.jpg)
+
+Inspector展示了对象头和指向对象元数据的指针，里面包括了Java类型的名字、继承关系、实现接口关系，字段信息、方法信息、运行时常量池的指针、内嵌的虚方法表（vtable）以及接口方法表（itable）等。
+
+revptrs可以找到对象的引用，如下所示：revptrs 0x0000000012c763f0
+
+![avator](img/23.jpg)
+
+## JConsole：Java监视与管理控制台
+
+JConsole（Java Monitoring and Management Console）是一块基于JMX（Java Management Extensions）的可视化监视、管理工具。它的主要功能是通过JMX的MBean（Managed Bean）对系统进行收集和参数动态调整。
+
+### 启动JConsole
+
+通过JDK/bin目录下的jconsole.exe启动Jconsole后，会自动搜索出本机运行的所有虚拟机进程。也可以使用下面的“远程进程”功能来连接远程服务器，对远程虚拟机进行监控。
+
+```java
+package com.jolan.jvm.example;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class OOMObject {
+    /**
+     * vm参数：-Xms100m -Xmx100m -XX:+UseSerialGC
+     */
+    public byte[] placeholder = new byte[64 * 1024];
+    public static void fillHeap(int num) throws InterruptedException {
+        List<OOMObject> list = new ArrayList<OOMObject>();
+        for(int i = 0 ; i < num; i++){
+            //稍作延迟，零监视曲线的变化更加明显
+            Thread.sleep(50);
+            list.add(new OOMObject());
+        }
+        System.gc();
+        System.out.println("end");
+    }
+
+    public static void main(String[] args) throws Exception {
+        fillHeap(1000);
+    }
+}
+```
+
+
+
+![avator](img/24.jpg)
+
+### 内存监控
+
+“内存”页签的作用相当于可视化的jstat命令，用于监控被收集器管理的虚拟机内存（被收集器直接管理的Java堆和被间接管理的方法区）的变化趋势。
+
+![avator](img/25.jpg)
+
+### 线程监控
+
+如果说JConsole的“内存”页签相当于可视化的jstat命令的话，那“线程”页签的功能就相当于可视化的jstack命令了，遇到线程停顿的时候可以使用这个页签的功能进行分析。前面讲解jstatck命令时提到线程长时间停顿的主要原因有等待外部资源（数据库连接、网络资源、设备资源等）、死循环、锁等待等。
+
+```java
+package com.jolan.jvm.example;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+
+public class JVM4_3_2_3 {
+    /**
+     * 线程死循环演示
+     */
+    public static void createBusyThread(){
+        Thread thread = new Thread(new Runnable() {
+            public void run() {
+                while (true);
+            }
+        }, "testBusyThread");
+        thread.start();
+    }
+
+    /**
+     * 线程锁等待演示
+     */
+    public static void createLockThread(final Object lock){
+        Thread thread = new Thread(new Runnable() {
+            public void run() {
+                synchronized (lock){
+                    try{
+                        lock.wait();
+                    }catch(Exception e){
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }, "testLockThread");
+        thread.start();
+    }
+
+    public static void main(String[] args) throws Exception {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        br.readLine();
+        createBusyThread();
+        br.readLine();
+        Object obj = new Object();
+        createLockThread(obj);
+    }
+}
+```
+
+![avator](img/26.jpg)
+
+```java
+package com.jolan.jvm.example;
+
+public class SynAddRunnable implements Runnable{
+
+    int a, b;
+
+    public SynAddRunnable(int a, int b){
+        this.a = a;
+        this.b = b;
+    }
+
+    public void run() {
+        synchronized (Integer.valueOf(a)){
+            synchronized (Integer.valueOf(b)){
+                System.out.println(a + b);
+            }
+        }
+    }
+
+    public static void main(String[] args) throws Exception{
+        Thread.sleep(2000);
+        for(int i = 0; i < 100; i++){
+            new Thread(new SynAddRunnable(1,2)).start();
+            new Thread(new SynAddRunnable(2,1)).start();
+        }
+    }
+}
+```
+
+![avator](img/27.jpg)
+
+## VisualVM：多合一故障处理工具
+
+VisualVM（All-in-One Java Troubleshooting Tool）是功能最强大的运行监视和故障处理程序之一。它除了常规的运行监视、故障处理外，还将提供其他方面的能力，譬如性能分析（Profiling）。VisulalVM不需要被监视的程序基于特殊Agent去运行，因此它的通用性很强。VisualVM基于NetBeans平台工具开发，有了插件扩展支持，VisualVM可以做到：
+
+1）显示虚拟机进程以及进程的配置、环境信息（ jps、 jinfo）。
+
+2）监视应用程序的处理器、垃圾收集、堆、方法区以及线程的信息（ jstat、 jstack）。
+
+3）dump以及分析堆转储快照（ jmap、 jhat）。
+
+4）方法级的程序运行性能分析，找出被调用最多、运行时间最长的方法。
+
+5）离线程序快照：收集程序的运行时配置、线程dump、内存dump等信息建立一个快照，可以将快照发送开发者处进行Bug反馈。
+
+6）其他插件带来的无限可能性。
+
+VisualVM工具在%JAVA_HOME%\jdk1.8.0_144\bin下，名字为jvisualvm.exe。双击即可打开，可以在工具->插件选项中下载和安装插件。
+
+![avator](img/28.jpg)
+
+### 生成、浏览堆转储快照
+
+右键单击应用程序节点，然后选择“堆Dump”
+
+![avator](img/29.png)
+
+### 分析程序性能
+
+在Profiler页签中，VisualVM提供了程序运行期间方法级的处理器执行时间分析以及内存分析。做Profiling分析肯定会对程序运行性能有比较大的影响，所以一般不在生产环境使用这项功能。在使用该功能前需要安装Profiler插件。
+
+![avator](img/30.jpg)
+
+### BTrace动态日志跟踪
+
+BTrace的作用是在不中断目标程序运行的前提下，通过HotSpot虚拟机的Instrument功能动态加入原本并不存在的调试代码。（安装失败，暂略）
+
+### 
+
