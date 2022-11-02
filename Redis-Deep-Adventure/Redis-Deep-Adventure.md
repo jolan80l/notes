@@ -266,9 +266,9 @@ Redis的集合相当于Java语言中的HashSet，它内部的键值对是无序�
 (empty array)
 ```
 
-#### zset（有序列表）
+#### zset（有序列表）
 
-zset一方面是一个set，保证了内部value的唯一性，另一方面它可以给每个value赋予一个score，代表这个value的排序权重。
+zset一方面是一个set，保证了内部value的唯一性，另一方面它可以给每个value赋予一个score，代表这个value的排序权重。
 
 ```shell
 zadd books 9.0 "think in java"
@@ -314,7 +314,7 @@ list、set、hash、zset这四种数据结构是容器型数据结构，它们�
 
 - create if not exists:如果容器不存在则先创建容器，再进行操作。
 
-- drop if no elements：如果容器里已没有元素，那么立即删除容器，释放内存。如list再lpop操作到最后一个元素，列表就消失了。
+- drop if no elements：如果容器里已没有元素，那么立即删除容器，释放内存。如list在lpop操作到最后一个元素，列表就消失了。
 
 ### 过期时间
 
@@ -337,7 +337,7 @@ OK
 
 ## 分布式锁
 
-我们常常使用Redis的setnx命令来判断是否可以获取到分布式锁，为了防止线程出现异常无法释放锁，还会使用expire命令给锁加一个时间。但是setnx和expire是两个命令，无法保证原子性。如果在两个命令中间线程出错了，仍然会造成无法释放锁的情况。
+我们常常使用Redis的setnx命令来判断是否可以获取到分布式锁，为了防止线程出现异常无法释放锁，还会使用expire命令给锁加一个时间。但是setnx和expire是两个命令，无法保证原子性。如果在两个命令中间线程出错了，仍然会造成无法释放锁的情况。
 
 为了解决这个问题，在Redis2.8版本中，作者加入了set指令的扩展参数，使setnx和expire指令可以一起执行，彻底解决了这个问题。
 
