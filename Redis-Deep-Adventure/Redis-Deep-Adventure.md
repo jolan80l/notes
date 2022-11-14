@@ -241,13 +241,13 @@ hash结构的存储消耗要高于单个的字符串。
 
 - 获取hash：hget key field
 
-- 获取hash中的所有：hgetall key
+- 获取hash中的所有：hgetall key
 
 - 批量设置hash：hmset key field value [field value ...]
 
-- 批量获取hash：hmget key field [field ...]
+- 批量获取hash：hmget key field [field ...]
 
-- 删除hash中的键：hdel key field [field ...]
+- 删除hash中键：hdel key field [field ...]
 
 
 ```shell
@@ -455,13 +455,13 @@ OK
 
 ### 队列空了怎么办
 
-和传统的消息队列不同，使用Redis实现的消息队列，消费者需要pop操作来获取消息，可是如果一旦Redis的队列是空的，消费者就会陷入pop的死循环。空的轮询不但拉高了消费者所在服务器的CPU，Redis的QPS也会被拉高。这样的消费者如果有几十个，Redis慢查询可能会显著增多。通常，当消费者获取不到新的数据时，让消费者线程适当睡眠来解决这个问题。如Thread.sleep(1)。
+和传统的消息队列不同，使用Redis实现的消息队列，消费者需要pop操作来获取消息，可是如果一旦Redis的队列是空的，消费者就会陷入pop的死循环。空的轮询不但拉高了消费者所在服务器的CPU，Redis的QPS也会被拉高。这样的消费者如果有几十个，Redis慢查询可能会显著增多。通常，当消费者获取不到新的数据时，让消费者线程适当睡眠来解决这个问题。如Thread.sleep(1)。
 
 ### 阻塞读
 
 通过线程睡眠可以解决队列为空的问题了，但是这会引入一个新的问题，那就是睡眠会导致消费者的延迟增大。
 
-针对这个问题，我们可以使用阻塞读来解决。阻塞读在队列没有数据的时候，会立即进入休眠状态，一旦数据到来，则立刻醒过来。消息的延迟几乎为另。阻塞读对应Redis中的命令是blpop/brpop，其中b代表blocking，也就是阻塞的意思。
+针对这个问题，我们可以使用阻塞读来解决。阻塞读在队列没有数据的时候，会立即进入休眠状态，一旦数据到来，则立刻醒过来。消息的延迟几乎为零。阻塞读对应Redis中的命令是blpop/brpop，其中b代表blocking，也就是阻塞的意思。
 
 - brpop key [key ...] timeout
 
@@ -479,7 +479,7 @@ lpush blocking_key message
 
 ### 空闲连接自动断开
 
-如果线程一直阻塞在那里，Redis的连接就成了闲置连接，闲置时间过久，Redis一般会主动断开连接，减少闲置资源的占用。这个时候blpop和brpop会抛出异常。所以针对上面的解决方案，消费者断需要注意捕获这个异常并重试。
+如果线程一直阻塞在那里，Redis的连接就成了闲置连接，闲置时间过久，Redis一般会主动断开连接，减少闲置资源的占用。这个时候blpop和brpop会抛出异常。所以针对上面的解决方案，消费者断需要注意捕获这个异常并重试。
 
 ### 延时队列的实现
 
@@ -512,7 +512,7 @@ while(true){
 
 ### 基本用法
 
-Redis的位数组是自动扩展的，如果设置了某个偏移位置超出了现有的内容范围，就会自动将位数组进行零扩充。接下来我们使用位操作将字符串设置为hello。首先需要得到hello的ASCII码。可在线查询或使用python命令行查询。hello去重后共四个字母，从前到后他们ASCII码的二进制分别是1101000，1100101，1101100，1101111。
+Redis的位数组是自动扩展的，如果设置了某个偏移位置超出了现有的内容范围，就会自动将位数组进行零扩充。接下来我们使用位操作将字符串设置为hello。首先需要得到hello的ASCII码。可在线查询或使用python命令行查询。hello去重后共四个字母，从前到后他们ASCII码的二进制分别是1101000，1100101，1101100，1101111。
 
 接下来设置第一个字符，也就是位数组的前8位。我们只需要设置值为1的位，其中h只有1、2、4位需要设置，e字符只有9、10、13、15位需要设置。
 
@@ -637,7 +637,7 @@ OK
 1) (integer) -6803336285151821824
 ```
 
-所谓有符号数是指获取位数组中第一个位是符号位，剩下的才是值。如果第一位是1，那就是负数。无符号数表示非负数，没有符号位，获取的位数组全部都是值。有符号数最多可以获取64位，无符号数只能获取63位。
+所谓有符号数是指获取位数组中第一个位是符号位，剩下的才是值。如果第一位是1，那就是负数。无符号数表示非负数，没有符号位，获取的位数组全部都是值。有符号数最多可以获取64位，无符号数只能获取63位。
 
 ```shell
 127.0.0.1:6379> bitfield w get u4 0 get u3 2 get i4 0 get i3 2  # 一次执行多个指令
@@ -746,7 +746,7 @@ OK
 
 布隆过滤器（Bloom Filter）也是Redis的高级数据结构。它主要是解决去重问题，虽然不是特别精确，但是在空间上能节省90%以上。
 
-可以把布隆过滤器理解为一个不怎么精确的set结构，当使用它的contains方法判断某个对象是否存在时，它可能会误判。但是布隆过滤器也并非特别不精准，相对来说它有小小的误判概率。当布隆过滤器说某个值存在时，这个值可能不存在；当它说某个值不存在时，这个值肯定不存在。
+可以把布隆过滤器理解为一个不怎么精确的set结构，当使用它的contains方法判断某个对象是否存在时，它可能会误判。但是布隆过滤器也并非特别不精准，相对来说它有小小的误判概率。当布隆过滤器说某个值存在时，这个值可能不存在；当它说某个值不存在时，这个值肯定不存在。
 
 Redis4.0后官方才以插件的功能提供了布隆过滤器。
 
@@ -762,7 +762,7 @@ Redis4.0后官方才以插件的功能提供了布隆过滤器。
 
 将文件放到需要的目录进行解压，然后进入目录，执行make命令。执行完成后，在目录下会多一个redisbloom.so文件。
 
-最后使用挂在方式重启redis(或者修改配置文件：loadmodule /xxx/redisbloom.so)。
+最后使用挂在方式重启redis(或者修改配置文件：loadmodule /xxx/redisbloom.so)。
 
 ```shell
 redis-server  --loadmodule xxx路径/redisbloom.so 
@@ -774,7 +774,7 @@ Redis的布隆过滤器有两个基本指令，bf.add和bf.exists。bf.add添加
 
 - 向布隆过滤器中添加元素：bf.add key ...options...
 
-- 判断布隆过滤器中是否存在元素：bf.exists key ...options..
+- 判断布隆过滤器中是否存在元素：bf.exists key ...options..
 
 ```shell
 127.0.0.1:6379> bf.add rb user1
@@ -815,11 +815,11 @@ Redis其实还提供了自定义参数的布隆过滤器，需要我们在add之
 
 #### 布隆过滤器的原理
 
-每个布隆过滤器对应到Redis的数据结构里面就是一个大型的位数组和几个不一样的无偏hash函数（能够把元素的hash值计算的比较均匀的hash函数）。向布隆过滤器中添加key时，会使用多个hash杉树对key进行hash，酸的一个整数索引值，然后对位数组长度进行取模运算，每个hash函数都会酸的一个不同的位置。再把位数组的这几个位置都置为1，就完成了add操作。判断元素是否在布隆过滤器中的原理和add操作类似。
+每个布隆过滤器对应到Redis的数据结构里面就是一个大型的位数组和几个不一样的无偏hash函数（能够把元素的hash值计算的比较均匀的hash函数）。向布隆过滤器中添加key时，会使用多个hash杉树对key进行hash，酸的一个整数索引值，然后对位数组长度进行取模运算，每个hash函数都会计算一个不同的位置。再把位数组的这几个位置都置为1，就完成了add操作。判断元素是否在布隆过滤器中的原理和add操作类似。
 
 ### 空间占用估计
 
-我们使用n表示预计元素的数量，f表示错误率，k表示hash函数的最佳数量，表示实际元素和预计元素的倍数。
+我们使用n表示预计元素的数量，f表示错误率，k表示hash函数的最佳数量，表示实际元素和预计元素的倍数。
 
 k = 0.7 * (1 / n)  # 约等于
 f = 0.6185^(1 / n) # ^表示次方计算
@@ -861,5 +861,633 @@ OK
 (empty array)
 127.0.0.1:6379> keys d*mo1
 1) "demo1"
+```
+
+但是keys命令有两个很明显的缺点：
+
+- 没有offset、limit参数，当key比较多时，输出结果太大，无法查看
+
+- keys是遍历算法，时间复杂度是o(n)。因为redis是单线程，会阻塞其他请求，导致Redis卡顿。
+
+为了解决这个问题，在2.8版本中加入了scan指令。相较于keys，它有如下几个特点：
+
+- 虽然时间复杂度也是o(n)，但是通过游标分步进行，不会阻塞线程。
+
+- 提供limit参数。
+
+- 返回的结果可能会有重复，客户端需要去重。
+
+- 遍历的过程中如果有数据修改，改动后的数据能不能遍历到是不确定的。
+
+- 单次返回的结果是空并不意味着遍历结束，而要看返回的游标值是否为零。
+
+### scan的基本用法
+
+scan提供了三个参数，第一个是cursor参数，第二个是key的正则模式，第三个是遍历的limit hint。第一次遍历时，cursor值为0，然后将返回结果中第一个整数值作为下一次遍历的cursor，一直遍历到返回的cursor值为0时结束。
+
+- scan cursor [MATCH pattern] [COUNT count] [TYPE type]
+
+```shell
+scan 0 match key99* count 1000
+```
+
+# 第2篇 原理篇
+
+## 线程IO模型
+
+### 非阻塞IO
+
+略
+
+### 事件轮轮询（多路复用）
+
+略
+
+### 指令队列
+
+Redis会将每个客户端套接字都关联一个指令队列。客户端的指令通过队列来排队进行顺序处理，先到先服务。
+
+### 响应队列
+
+Redis服务器通过响应队列来将指令的返回结果回复给客户端。
+
+### 定时任务
+
+Redis的定时任务会记录在一个被称为“最小堆”的数据结构中。在这个堆中，最快要执行的任务排在堆的最上方。每次执行完一个任务，Redis将定时任务的执行时间记录下来，这个时间作为接下来select系统调用的timeout参数。
+
+## 通信协议
+
+RESP是Redis序列化协议（Redis Serialization Protocol）的简写。
+
+## 持久化
+
+Redis的持久化机制有两种，第一种是快照，第二种是AOF日志。快照是一次全量备份，AOF日志是连续增量备份。快照是内存数据的二进制序列化形式，在存储上非常紧凑，而AOF日志记录的是内存数据修改的指令记录文本。AOF日志在长期的运行过程中会变得无比庞大，重启时需要加载AOF日志进行指令重放，这个过程耗时很长。
+
+### 快照原理
+
+Redis使用操作系统的多进程COW（Copy On Write）机制来实现快照持久化。
+
+### fork（多进程）
+
+Redis在持久化时会调用glibc的函数fork产生一个子进程，快照持久化完全交给子进程来处理，父进程继续处理客户端请求。子进程刚刚产生时，它和父进程共享内存里面的代码段和数据段。
+
+子进程做数据持久化，不会修改现有内存数据结构，它只是对数据结构进行遍历读取，然后序列化到磁盘中。但是父进程不一样，它必须持续服务客户端请求，然后对内存数据结构进行不间断的修改。
+
+这个时候就会使用操作系统的COW机制进行数据段页面的分离。当父进程对其中一个页面的数据进行修改时，会将被共享的页面复制一份分离出来，然后对这个复制的页面进行修改。这时子进程相应的页面是没有变化的，还是进程产生时那一瞬间的数据。
+
+子进程因为数据没有变化，它能看到的内存里的数据在进程产生的一瞬间就确定了，再也不会改变，这也是为什么Redis的持久化叫“快照”的原因。
+
+### AOF原理
+
+AOF日志存储的是Redis服务器的顺序指令序列，AOF日志只记录对内存进行修改的指令记录。Redis是先执行指令，再将日志存盘。
+
+### AOF重写
+
+Redis提供了bgrewriteaof指令用于对AOF日志进行瘦身。
+
+### fsync
+
+如果及其突然宕机，AOF日志内容可能还没有来得及完全刷新到磁盘中，这个时候就会出现日志丢失。Linux的glibc提供了fsync(int fd)的函数可以将指定文件的内容强制从内核缓存刷新到磁盘。只要Redis进行实时调用fsync函数就可以保证AOF日志不丢失。但是fsync是一个磁盘IO操作，速度很慢。所以在生产环境的服务器中，Redis通常是每隔1s左右执行一次fsync操作，这个1s的周期是可以配置的。
+
+### 运维
+
+通常Redis的主节点不会进行持久化操作，持久化操作主要在从节点进行。从节点是备份节点，没有来自客户端请求的压力，它的操作系统资源往往比较充沛。
+
+但是如果出现网络分区，从节点长期连不上主节点，就会出现数据不一致的问题。所以在生产环境下要做好实时监控工作，保证网络通常或者能快速修复。
+
+### Redis 4.0混合持久化
+
+重启Redis时，使用rdb恢复内存会丢失大量数据，使用AOF恢复内存会话费很长时间。Redis 4.0为了解决这个问题，带来了一个新的持久化选项——混合持久化。
+
+将rdb文件的内容和增量的AOF日志文件存在一起。这里的AOF日志不再是权量日志，而是自持久化开始到持久化结束这段时间发生的增量AOF日志，通常这部分AOF日志很小。
+
+于是在Redis重启时，可以先加载rdb的内容，然后再重放增量AOF日志。
+
+## 管道
+
+Redis管道（pipeline）本身并不是Redis服务器直接提供的技术，这个技术本质上是由客户端提供的。
+
+### Redis的消息交互
+
+下面两个图是两个普通指令和使用了管道之后的区别。它可以合并操作来减少响应时间。
+
+![avatar](img/4.png)
+
+![avatar](img/5.png)
+
+### Jedis的管道使用示例
+
+这是jedis使用管道的代码示例：
+
+```java
+public class PipelineExample {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("127.0.0.1", 6379);
+        // 记录执行开始时间
+        long beginTime = System.currentTimeMillis();
+        // 获取 Pipeline 对象
+        Pipeline pipe = jedis.pipelined();
+        // 设置多个 Redis 命令
+        for (int i = 0; i < 100; i++) {
+            pipe.set("key" + i, "val" + i);
+            pipe.del("key"+i);
+        }
+        // 执行命令
+        pipe.sync();
+        // 记录执行结束时间
+        long endTime = System.currentTimeMillis();
+        System.out.println("执行耗时：" + (endTime - beginTime) + "毫秒");
+    }
+}
+```
+
+如果需要接受所有命令的返回值，可以使用syncAndReturnAll()方法：
+
+```java
+public class PipelineExample {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("127.0.0.1", 6379);
+        // 获取 Pipeline 对象
+        Pipeline pipe = jedis.pipelined();
+        // 设置多个 Redis 命令
+        for (int i = 0; i < 100; i++) {
+            pipe.set("key" + i, "val" + i);
+        }
+        // 执行命令并返回结果
+        List<Object> res = pipe.syncAndReturnAll();
+        for (Object obj : res) {
+            // 打印结果
+            System.out.println(obj);
+        }
+    }
+}
+```
+
+## 事物
+
+Redis的事物模型很不严格，这要求我们不能像使用关系型数据库的事物一样来使用Redis事物。
+
+### Redis事物的基本用法
+
+Redis的事物指令分别是multi、exec、discard。multi指示事物的开始，exec指示事物的执行，discard指示事物的丢弃。
+
+```shell
+127.0.0.1:6379> multi
+OK
+127.0.0.1:6379(TX)> incr books
+QUEUED
+127.0.0.1:6379(TX)> incr books
+QUEUED
+127.0.0.1:6379(TX)> exec
+1) (integer) 1
+2) (integer) 2
+127.0.0.1:6379>
+```
+
+### 原子性
+
+```shell
+127.0.0.1:6379> multi
+OK
+127.0.0.1:6379(TX)> set books iamastring
+QUEUED
+127.0.0.1:6379(TX)> incr books
+QUEUED
+127.0.0.1:6379(TX)> set poorman iamdesperate
+QUEUED
+127.0.0.1:6379(TX)> exec
+1) OK
+2) (error) ERR value is not an integer or out of range
+3) OK
+127.0.0.1:6379> get books
+"iamastring"
+127.0.0.1:6379> get poorman
+"iamdesperate"
+127.0.0.1:6379>
+```
+
+上面的例子是事物执行到中间时遇到失败了，因为我们不能对一个字符串进行数学运算。事物在遇到指令执行失败后，后面的指令还会继续执行。所以说Redis的事物根本不具备“原子性”，而仅仅是满足了事物的“隔离性”中的串行化——当前执行的事物有着不被其他事物打断的权利。
+
+### discard（丢弃）
+
+Redis为事物提供了一个discard指令，用于丢弃事物缓存队列中的所有指令，在exec执行之前。
+
+```shell
+127.0.0.1:6379> get books
+(nil)
+127.0.0.1:6379> multi
+OK
+127.0.0.1:6379(TX)> incr books
+QUEUED
+127.0.0.1:6379(TX)> incr books
+QUEUED
+127.0.0.1:6379(TX)> discard
+OK
+127.0.0.1:6379> get books
+(nil)
+```
+
+### 事物执行优化
+
+通常Redis的客户端在执行事务时都会结合pipeline一起使用，这样可以将多次IO操作压缩为单次IO操作。
+
+### watch
+
+Redis提供一种watch机制，watch就是一种乐观锁。watch会在事物开始之前盯住一个或多个关键变量，当事物执行时，也就是服务器收到了exec指令时，Redis会检查关键变量自watch之后是否被修改了。如果关键变量被修改过，exec指令就会返回null回复客户端，意思是执行失败。此时客户端可以选择重试。
+
+```shell
+127.0.0.1:6379> watch books
+OK
+127.0.0.1:6379> incr books
+(integer) 1
+127.0.0.1:6379> multi
+OK
+127.0.0.1:6379(TX)> incr books
+QUEUED
+127.0.0.1:6379(TX)> exec
+(nil)
+```
+
+Redis禁止在multi和exec之间执行watch指令，而必须在multi之前盯住关键变量，否则会出错。
+
+```shell
+127.0.0.1:6379> multi
+OK
+127.0.0.1:6379(TX)> watch books
+(error) ERR WATCH inside MULTI is not allowed
+```
+
+## PubSub
+
+### 消息多播
+
+消息多播允许生产者只生产一次消息，由中间件负责将消息复制到多个消息队列，每个消息队列由相应 的消费组进行消费。
+
+### PubSub模块
+
+为了支持消息多播，Redis不能再依赖于那5种基本数据类型了，它单独使用了一个模块来支持消息多播，这个歌模块的名字叫做PubSub，也就是PublisherSubscriber（发布者/订阅者模式）。
+
+```shell
+127.0.0.1:6379> subscribe t_channel1 t_channel2
+Reading messages... (press Ctrl-C to quit)
+1) "subscribe"
+2) "t_channel1"
+3) (integer) 1
+1) "subscribe"
+2) "t_channel2"
+3) (integer) 2
+1) "message"  # 在client2发布消息后打印
+2) "t_channel1"  
+3) "java coming"
+1) "message"  # 在client2发布消息后打印
+2) "t_channel2"
+3) "java coming"
+```
+
+一下是client2的命令
+
+```shell
+127.0.0.1:6379> pubsub channels  # 查看所有频道
+1) "t_channel2"
+2) "t_channel1"
+127.0.0.1:6379> publish t_channel1 "java coming"
+(integer) 1
+127.0.0.1:6379> publish t_channel2 "java coming"
+(integer) 1
+```
+
+Redis PubSub的生产者和消费者是不同的连接，也就是上面的例子实际上使用了两个Redis连接。这是必须的，因为Redis不允连接在subscribe等待消息时还要进行其他操作。
+
+必须先启动消费者，然后在执行生产者。消费者我们可以启动多个，PubSub会保证它们收到的是相同的消息序列。
+
+python实现的消费者：
+
+```python
+# -*- coding: utf-8 -*-
+import time
+import redis
+
+client = redis.StrictRedis()
+p = client.pubsub()
+p.subscribe(codehole)
+for msg in p.listen():
+    print msg
+```
+
+python实现的生产者：
+
+```python
+# -*- coding: utf-8 -*-
+import redis
+
+client = redis.StrictRedis()
+client.publish("codehole", "python comes")
+client.publish("codehole", "java comes")
+client.publish("codehole", "golang comes")
+```
+
+### 模式订阅
+
+为了简化订阅的繁琐，Redis提供了模式订阅功能Pattern Subscribe，这样就可以一次订阅多个主题，即使生产者新增加了同模式的主题，消费者也可以立即收到消息。
+
+```shell
+127.0.0.1:6379> psubscribe lan.*
+Reading messages... (press Ctrl-C to quit)
+1) "psubscribe"
+2) "lan.*"
+3) (integer) 1
+```
+
+### PubSub的缺点
+
+- 如果生产者生产了一个消息，但是此时没有消费者，那么消息会被直接丢弃。
+
+- 如果在多个消费者中间突然有一个宕机了，当它再重新连接上来后也无法消费宕机过程中生产者生产的消息
+
+- 如果Redis停机重启，PubSub的消息是不会持久化的
+
+正式因为PubSub的这些缺点，在消息队列的领域它几乎找不到合适的应用场景。在2018年6月，Redis5.0新增了Stream数据结构，这个功能给Redis带来了持久化消息队列。
+
+# 第3篇 集群篇
+
+### CAP理论
+
+- C：Consistent，一致性
+
+- A：Availability，可用性
+
+- P：Partition tolerance，分区容错性
+
+分布式系统的节点往往都是分布在不同的机器上进行网络隔离开的，这意味着必然会有网络断开的风险，这个网络断开的场景的专业词汇叫做网络分区。
+
+在网络分区发生时，两个分布式节点之间无法进行通信，我们对一个节点进行的修改将无法同步到另外的一个节点，所以数据的一致性将无法满足，因为两个分布式节点的数据不再保持一致。除非我们牺牲可用性，也就是暂停分布式节点服务，在网络分区发生时，不再提供修改数据的功能，直到网络状况完全恢复正常再继续对外提供服务。
+
+当网络分区发生时，一致性可可用性两难全。
+
+### 最终一致
+
+Redis的主从数据是异步同步的，所以分布式的Redis系统并不满足一致性要求。当客户端在Redis的主节点修改了数据后，立即返回，即使在主从网络断开的情况下，主节点依旧可以正常对外提供修改服务，所以Redis满足可用性。
+
+Redis保证最终一致性，从节点会努力追赶主节点，最终从节点的状态和主节点的状态保持一致。
+
+### 增量同步
+
+Redis同步的是指令流，主节点会将那些对自己的状态产生修改性影响的指令记录在本地的内存buffer中，然后异步将buffer中的指令同步到从节点，从节点一边执行同步的指令流来达到和主节点一样的状态，一边向主节点反馈自己同步到哪里了。
+
+因为内存的buffer是有限的，所以Redis主节点不能将所有的指令都记录在内存buffer中。如果以为网络状况不好，从节点在短时间内无法和主节点进行同步，那么当网络状况恢复时，Redis的主节点中那些没有同步的指令在buffer中可能已经被后续的指令覆盖了。
+
+### 快照同步
+
+快照同步是一个非常耗资源的操作，它首先需要在主节点上进行一次bgsave，将当前内存的数据全部快照到磁盘文件中，然后再将快照文件的内容全部传送到从节点。从节点将快照文件接受完毕后，立即执行一次全量加载，加载之前先要将当前内存的数据清空，加载完毕后通知主节点继续进行增量同步。
+
+### 增加从节点
+
+当从节点刚刚加入到集群时，它必须先进行一次快照同步，同步完成后再继续进行增量同步。
+
+### 无盘复制
+
+Redis2.8.18版本开始，支持无盘复制。所谓无盘复制是指主服务器直接通过套接字将快照内容发送到从节点，生成快照是一个遍历的过程，主节点会一边遍历内存，一边将序列化的内容发送到从节点。从节点将接收到的内容存储到磁盘文件中，再进行一次性加载。
+
+### wait指令
+
+Redis的复制是异步进行的，wait指令可以让异步复制变为同步复制，确保系统的强一致性（不严格）。wait指令是Redis3.0版本以后才出现的。
+
+wait提供两个参数，第一个参数是从节点的数量N，第二个参数是时间t，以毫秒为单位。两个参数的含义是：等待wait指令之前的所有写操作同步到N个从节点，最多等待时间t。如果t等于0，表示无限等待直到N个从节点同步完成。
+
+注意当t=0时，在同步完成前，Redis服务将不可用。
+
+## Sentinel
+
+Sentinel负责持续监控主从节点的健康，当主节点挂掉时，自动选择一个最优的从节点切换成为主节点。客户端来连接集群时，会首先连接Sentinel，通过Sentinel来查询主节点的地址，然后再连接主节点进行数据交互。当主节点发生故障时，客户端会重新向Sentinel要地址，Sentinel会将最新的主节点地址告诉客户端。
+
+### 消息丢失
+
+Redis主从采用异步复制，意味着当主节点宕机时，从节点可能没有收到全部的同步消息，这部分为同步的消息就丢失了。如果主从延迟特别大，那么丢失的数据就可能会特别多。Sentinel无法保证消息完全不丢失，但是也能尽量保证消息少丢失。它有两个可选项可以限制主从延迟过大。
+
+```
+min-slaves-to-write 1
+min-slaves-max-lag 10
+```
+
+第一个参数表示主节点必须至少有一个从节点在进行正常复制，否则就停止对外写服务，丧失可用性。何为正常复制，何为异常复制呢？这是由第二个参数控制的，它的单位是妙（s），表示如果在10s内没有收到从节点的反馈，就意味着从节点同步不正常，要么是网络断开了，要么是一只没有反馈。
+
+### Sentinel基本用法
+
+https://www.cnblogs.com/zhoujinyi/p/5569462.html
+
+## Codis
+
+单个Redis的内存不宜过大，内存太大会导致rdb文件过大，进一步导致主从同步时全量同步时间过长，在实例重启恢复时也会消耗很长的数据加载时间，特别是在云环境下，单个实力内存大小往往都是受限的。
+
+Codis上挂接的所有Redis实例构成一个Redis集群，当集群空间不足时，可以通过动态增加Redis实例来实现扩容需求。
+
+客户端操纵Codis与操纵Redis几乎没有区别，还可以使用相同的客户端SDK，不需要任何变化。
+
+因为Codis是无状态的，它只是一个转发代理中间件，这意味着我们可以启动多个Codis实例，供客户端使用，每个Codis节点都是对等的。
+
+![avatar](img/6.png)
+
+![avatar](img/7.png)
+
+### Codis分片原理
+
+
+Codis默认将所有key划分为1024个槽位（slot），它先对客户端的key进行crsc32运算计算hash值，再将hash后的整数值对1024这个整数进行取模得到一个余数，这个余数就是对应key的槽位。
+
+### 不同Codis实例之间槽位关系如何同步
+
+Codis还需要一个分布式配置存储数据库专门用来除久化槽位关系。Codis开始用zookeeper，后来连etcd也一块支持了。
+
+### 扩容
+
+刚开始Codis后段只有一个Redis实例，1024个槽位全部指向同一个Redis。然后一个Redis实例内存不够了，所以又加了一个Redis实例。这时候需要对槽位关系进行调整，将一半的槽位划分到新的节点。这意味着需要对这一半的槽位对应的所有key进行迁移，迁移到新的Redis实例。
+
+Codis对Redis进行了改造，增加了SLOTSSCAN指令，可以遍历指定slot下所有的key。Codis通过SLOTSSCAN扫描出待迁移槽位的所有key，然后挨个前一每个key到新的Redis节点。单个key被迁移一次后，在旧实例中它就被彻底删除了，也就不可能会被再次扫描出来。
+
+### 自动均衡
+
+Codis提供了自动均衡功能。自动均衡会在系统比较空闲的时候观察每个Redis实例对应的slot数量，如果不平均，就会自动进行迁移。
+
+### Codis的代价
+
+- Codis所有的key分散在不同的Redis实例中，所以就不能再支持事物了。同样rename操作也很危险。
+
+- 为了支持扩容，单个key对应的value不宜过大，因为集群迁移的最小单位是key，如果value过大，可能会带来迁移卡顿。
+
+- Codis因为增加了Proxy作为中转层，所以在网络开销上要比单个Redis大。
+
+### mget指令的操作过程
+
+如果在使用了Codis的情况下使用mget指令，Codis会将key按照所分配的实例打散分组，然后一次对每个实例调用meget方法，最后将结果汇总为一个，再返回给客户端。
+
+## Cluster
+
+Cluster是Redis官方提供的集群化方案。与Codis有所不同，Redis Cluster是去中心化的。Cluster集群由多个Redis节点组成，每个节点负责整体集群的一部分数据，每个节点负责的数据多少可能不一样。这些节点相互连接组成一个对等的集群，它们之间通过一种特殊的二进制协议交互集群信息。
+
+Redis Cluster将所有数据划分为16384个槽位，每个节点负责其中一部分槽位。槽位的信息存储与每个节点中，不需要另外的分布式存储空间来存储节点槽位信息。
+
+当Redis Cluster的客户端来连接集群时，也会得到一份集群的槽位配置信息。这样当客户端要查找某个key时，可以直接定位到目标节点。
+
+客户端为了可以直接定位某个具体的key所在的节点，需要缓存槽位相关信息，这样才可以准确快速地定位到相应的节点。因为客户端与服务器存储槽位的信息可能出现不一致的情况，还需要纠正机制来实现槽位信息的校验调整。
+
+### 槽位定位算法
+
+Redis Cluster默认会对key值使用crc16算法进行hash，得到一个整数值，然后用这个整数值对16384进行取模得到具体槽位。同时还允许用户强制把某个key挂在特定槽位上。
+
+### 跳转
+
+当客户端想一个错误的节点发出指令后，该节点会发现指令的key所在的槽位并不归自己管理，这时它会向客户端发送一个特殊的跳转指令携带目标操作的节点地址，告诉客户端去连接这个节点以获取数据。
+
+```shell
+GET x
+-MOVED 3999 127.0.0.1:6381
+```
+
+客户端再收到MOVED指令后，要立即纠正本地槽位映射表。后续所有key将使用新的槽位映射表。
+
+# 第4篇
+
+Redis5.0提出了新的数据结构Stream，它是一个新的强大的支持多播的可持久化消息队列。
+
+每个Stream都有唯一的名称，他就是Redis的key，在首次使用xadd指令追加消息时自动创建。
+
+![avatar](img/8.png)
+
+每个Stream下有多个消费组（Customer Group），每个消费组下有多个消费者。每个消费组会有个游标last_delivered_id在Stream数组之上往前移动，表示当前消费组已经消费到哪条消息了。每个Stream数据结构内部的消费组名称是唯一的，消费组不会自动创建，他需要单独的指令xgroup create进行创建。
+
+每个消费组的状态都是独立的，相互不受影响，也就是说同一份Stream内部消息会被每个消费组都消费到。
+
+消费组中的多个消费者是竞争关系，任意一个消费者读取了消息都会使游标last_delivered_id往前移动。每个消费者都有组内唯一的名称。
+
+### 消息ID
+
+消息ID的形式是timestampInMills-sequence。消息ID可以由服务器自动生成，也可以由客户端自己指定，但是形式必须是整数-整数，而且后面加入的消息ID必须大于前面的。
+
+### 消息内容
+
+消息内容就是键值对
+
+### 增删改查
+
+- xadd：向Stream追加消息。
+
+- xdel：从Stream中删除消息，这里的删除仅仅是设置标志位，不影响消息从长度。
+
+- xrang：获取Stream中的消息列表，会自动过滤已经删除的消息。
+
+- xlen：获取Stream消息长度。
+
+- del：删除整个Stream消息列表中的所有消息。
+
+### 独立消费
+
+我们可以在不定义消费组的情况下进行Stream消息的独立消费。Redis设计了一个单独消费指令xread，可以将Stream当成普通的消息队列（list）来使用。
+
+### 创建消费组
+
+通过xgroup create指令创建消费组。
+
+### 消费
+
+Stream提供了xreadgroup指令可以进行消费组的组内消费，需要提供消费组名称、消费者名称和起始消息ID。
+
+## Info
+
+- Server：服务器运行环境参数。
+
+- Clients：客户端相关信息。
+
+- Memory：服务器运行内训统计数据。
+
+- Persistence：持久化信息。
+
+- Stats：通用统计数据。
+
+- Replication：主从复制相关信息。
+
+- CPU：CPU使用情况。
+
+- Cluster：集群信息。
+
+- KeySpace：键值对统计数量信息。
+
+info可以一次性获取所有信息，也可以按块获取信息。如info memory。
+
+### Redis连接了多少客户端
+
+```shell
+127.0.0.1:6379> info clients
+# Clients
+connected_clients:1  # 正在连接的客户端数量
+cluster_connections:0
+maxclients:10000
+client_recent_max_input_buffer:32
+client_recent_max_output_buffer:0
+blocked_clients:0
+tracking_clients:0
+clients_in_timeout_table:0
+```
+
+### 复制积压缓冲区多大
+
+```shell
+127.0.0.1:6379> info replication
+# Replication
+role:master
+connected_slaves:0
+master_failover_state:no-failover
+master_replid:54d8bf95b50f908015be0eab0dfb5b1809b20b78
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:0
+second_repl_offset:-1
+repl_backlog_active:0
+repl_backlog_size:1048576  # 这个就是积压缓冲区大小
+repl_backlog_first_byte_offset:0
+repl_backlog_histlen:0
+```
+
+复制积压缓冲区大小非常重要，它严重影响主从复制的效率。
+
+```shell
+127.0.0.1:6379> info stats
+# Stats
+total_connections_received:2
+total_commands_processed:15
+instantaneous_ops_per_sec:0
+total_net_input_bytes:529
+total_net_output_bytes:51767
+instantaneous_input_kbps:0.00
+instantaneous_output_kbps:0.00
+rejected_connections:0
+sync_full:0
+sync_partial_ok:0
+sync_partial_err:0  # 半同步失败次数
+expired_keys:0
+expired_stale_perc:0.00
+expired_time_cap_reached_count:0
+expire_cycle_cpu_milliseconds:21
+evicted_keys:0
+keyspace_hits:0
+keyspace_misses:0
+pubsub_channels:0
+pubsub_patterns:0
+latest_fork_usec:0
+total_forks:0
+migrate_cached_sockets:0
+slave_expires_tracked_keys:0
+active_defrag_hits:0
+active_defrag_misses:0
+active_defrag_key_hits:0
+active_defrag_key_misses:0
+tracking_total_keys:0
+tracking_total_items:0
+tracking_total_prefixes:0
+unexpected_error_replies:0
+total_error_replies:6
+dump_payload_sanitizations:0
+total_reads_processed:17
+total_writes_processed:15
+io_threaded_reads_processed:0
+io_threaded_writes_processed:0
 ```
 
