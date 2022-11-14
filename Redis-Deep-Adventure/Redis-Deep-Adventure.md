@@ -1383,11 +1383,11 @@ Redis5.0提出了新的数据结构Stream，它是一个新的强大的支持多
 
 我们可以在不定义消费组的情况下进行Stream消息的独立消费。Redis设计了一个单独消费指令xread，可以将Stream当成普通的消息队列（list）来使用。
 
-### 创建消费组
+### 创建消费组
 
 通过xgroup create指令创建消费组。
 
-### 消费
+### 消费
 
 Stream提供了xreadgroup指令可以进行消费组的组内消费，需要提供消费组名称、消费者名称和起始消息ID。
 
@@ -1490,4 +1490,5 @@ total_writes_processed:15
 io_threaded_reads_processed:0
 io_threaded_writes_processed:0
 ```
+
 
