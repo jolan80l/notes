@@ -125,7 +125,7 @@ OK
 (nil)
 127.0.0.1:6379> setnx name jolan  #如果name不存在就执行set创建
 (integer) 1
-127.0.0.1:6379> setnx name jolan  #因为name已存在所以set创建不成功
+127.0.0.1:6379> setnx name jolan  #因为name已存在所以set创建不成功
 (integer) 0
 127.0.0.1:6379>
 ```
@@ -1525,11 +1525,11 @@ Redis会将每个设置了过期时间的key放入一个独立的字典中，以
 
 当Redis内存超出物理内存限制时，内存的数据会开始和磁盘产生频繁的交换。交换会让Redis的性能急剧下降。
 
-为了限制最大内存的使用，Redis提供了配置maxmemory来限制内存超出期望大小。当实际内存超过这个值，Redis提供了几种可选策略（maxmemory-policy）来让用户自己决定该如何腾出新的空间以继续提供读写服务。
+为了限制最大内存的使用，Redis提供了配置maxmemory来限制内存超出期望大小。当实际内存超过这个值，Redis提供了几种可选策略（maxmemory-policy）来让用户自己决定该如何腾出新的空间以继续提供读写服务。
 
-- noeviction：不会继续提供写请求服务（del可以），读请求可以继续。这个默认淘汰策略。
+- noeviction：不会继续提供写请求服务（del可以），读请求可以继续。这个默认淘汰策略。
 
-- volatile-lru：尝试淘汰设置了过期时间的key，最少使用的key优先被淘汰。
+- volatile-lru：尝试淘汰设置了过期时间的key，最少使用的key优先被淘汰。
 
 - volatile-ttl：跟上面几乎一样，不过淘汰策略不是LRU，而是比较key的剩余寿命，ttl越小越优先被淘汰。
 
@@ -1681,7 +1681,7 @@ requirepass yoursecurepasswordhereplease
 
 ### Lua脚本安全
 
-开发者必须禁止Lua脚本由用户输入的内容生成（类似于SQL注入），这可能会被其他人利用，通过植入恶意的攻击代码来得到Redis的主机权限。
+开发者必须禁止Lua脚本由用户输入的内容生成（类似于SQL注入），这可能会被其他人利用，通过植入恶意的攻击代码来得到Redis的主机权限。
 
 同时，我们应该让Redis以普通用户的身份启动，这样即使存在恶意代码，也无法拿到root权限。
 
@@ -1693,5 +1693,5 @@ spiped会在客户端和服务端各启动一个spiped进程。客户端的进�
 
 ### spiped使用入门
 
-略 
+略
 
