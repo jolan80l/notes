@@ -1355,7 +1355,7 @@ Redis5.0提出了新的数据结构Stream，它是一个新的强大的支持多
 
 每个Stream下有多个消费组（Customer Group），每个消费组下有多个消费者。每个消费组会有个游标last_delivered_id在Stream数组之上往前移动，表示当前消费组已经消费到哪条消息了。每个Stream数据结构内部的消费组名称是唯一的，消费组不会自动创建，他需要单独的指令xgroup create进行创建。
 
-每个消费组的状态都是独立的，相互不受影响，也就是说同一份Stream内部消息会被每个消费组都消费到。
+每个消费组的状态都是独立的，相互不受影响，也就是说同一份Stream内部消息会被每个消费组都消费到。
 
 消费组中的多个消费者是竞争关系，任意一个消费者读取了消息都会使游标last_delivered_id往前移动。每个消费者都有组内唯一的名称。
 
@@ -1497,11 +1497,11 @@ io_threaded_writes_processed:0
 
 ### Redlock算法
 
-为了解决这个问题，发明了Redlock算法，它的流程比较复杂，不过已经有很多开源library做了良好的封装。
+为了解决这个问题，发明了Redlock算法，它的流程比较复杂，不过已经有很多开源library做了良好的封装。
 
 为了使用Redlock，需要提供多个Redis实例，Redlock使用“大多数机制”。
 
-加锁时，它会向过半节点发送set（key，value，nx=True，ex=xxx）指令，只要过半节点set成功，就认为加锁成功。释放锁时，需要向所有节点发送del指令。使用Redlock相比单实例Redis的性能会下降一些。
+加锁时，它会向过半节点发送set（key，value，nx=True，ex=xxx）指令，只要过半节点set成功，就认为加锁成功。释放锁时，需要向所有节点发送del指令。使用Redlock相比单实例Redis的性能会下降一些。
 
 ## 过期策略
 
@@ -1511,7 +1511,7 @@ Redis会将每个设置了过期时间的key放入一个独立的字典中，以
 
 ### 定时扫描策略
 
-1）从过期字典中随机选出20个key
+1）从过期字典中随机选出20个key
 
 2）删除这20个key中已经过期的
 
@@ -1525,7 +1525,7 @@ Redis会将每个设置了过期时间的key放入一个独立的字典中，以
 
 当Redis内存超出物理内存限制时，内存的数据会开始和磁盘产生频繁的交换。交换会让Redis的性能急剧下降。
 
-为了限制最大内存的使用，Redis提供了配置maxmemory来限制内存超出期望大小。当实际内存超过这个值，Redis提供了几种可选策略（maxmemory-policy）来让用户自己决定该如何腾出新的空间以继续提供读写服务。
+为了限制最大内存的使用，Redis提供了配置maxmemory来限制内存超出期望大小。当实际内存超过这个值，Redis提供了几种可选策略（maxmemory-policy）来让用户自己决定该如何腾出新的空间以继续提供读写服务。
 
 - noeviction：不会继续提供写请求服务（del可以），读请求可以继续。这个默认淘汰策略。
 
@@ -1533,7 +1533,7 @@ Redis会将每个设置了过期时间的key放入一个独立的字典中，以
 
 - volatile-ttl：跟上面几乎一样，不过淘汰策略不是LRU，而是比较key的剩余寿命，ttl越小越优先被淘汰。
 
-- volatile-random：淘汰随机的key集合
+- volatile-random：淘汰随机的key集合
 
 - allkeys-lru：按LRU算法淘汰所有的key，不只是设置了过期时间的key
 
@@ -1657,7 +1657,7 @@ Redis在配置文件中提供了rename-command指令用于将某些危险的指�
 rename-command keys abckeysabc
 ```
 
-这样一来，如果还想执行keys指令，那就不能直接使用keys了，而需要使用abckeysabc。如果想完全封杀某条指令，可以将指令rename成空串，就无法通过任何字符串来执行这条指令了。
+这样一来，如果还想执行keys指令，那就不能直接使用keys了，而需要使用abckeysabc。如果想完全封杀某条指令，可以将指令rename成空串，就无法通过任何字符串来执行这条指令了。
 
 ```
 rename-command flushall ""
@@ -1665,7 +1665,7 @@ rename-command flushall ""
 
 ### 端口安全
 
-Redis可以指定监听的ip地址，只有被Reids所监听的客户端才能访问Redis。如果Redis要求只能本地访问，可以将ip配置为127.0.0.1
+Redis可以指定监听的ip地址，只有被Reids所监听的客户端才能访问Redis。如果Redis要求只能本地访问，可以将ip配置为127.0.0.1
 
 ```
 bind 10.100.20.13
@@ -1677,21 +1677,21 @@ bind 10.100.20.13
 requirepass yoursecurepasswordhereplease
 ```
 
-密码控制也会影响到从节点复制，从节点必须在配置文件里面使用masterauth指令配置响应的密码才可以进行复制操作。
+密码控制也会影响到从节点复制，从节点必须在配置文件里面使用masterauth指令配置响应的密码才可以进行复制操作。
 
 ### Lua脚本安全
 
-开发者必须禁止Lua脚本由用户输入的内容生成（类似于SQL注入），这可能会被其他人利用，通过植入恶意的攻击代码来得到Redis的主机权限。
+开发者必须禁止Lua脚本由用户输入的内容生成（类似于SQL注入），这可能会被其他人利用，通过植入恶意的攻击代码来得到Redis的主机权限。
 
-同时，我们应该让Redis以普通用户的身份启动，这样即使存在恶意代码，也无法拿到root权限。
+同时，我们应该让Redis以普通用户的身份启动，这样即使存在恶意代码，也无法拿到root权限。
 
 ## Redis安全通信
 
 Redis本身并不支持SSL安全链接，不过可以使用SSL代理软件，通过代理我们可以让通信数据得到加密。spiped就是这样的一款SSL代理软件，它也是Redis官方推荐的代理软件。
 
-spiped会在客户端和服务端各启动一个spiped进程。客户端的进程负责接受来自Redis Client发过来的请求数据，加密后传送到服务端的spiped进程。服务端的spiped进程将接收到的数据解密后传递到Redis Server。
+spiped会在客户端和服务端各启动一个spiped进程。客户端的进程负责接受来自Redis Client发过来的请求数据，加密后传送到服务端的spiped进程。服务端的spiped进程将接收到的数据解密后传递到Redis Server。
 
 ### spiped使用入门
 
-略
+略 
 
