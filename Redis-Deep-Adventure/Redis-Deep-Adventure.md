@@ -1491,4 +1491,207 @@ io_threaded_reads_processed:0
 io_threaded_writes_processed:0
 ```
 
+## 再谈分布式锁
+
+再Sentinel集群中，当主节点挂掉时，从节点会取而代之，但客户端上却并没有明显感知。比如，第一个客户端再主节点中成功的申请了一把锁，但是这把锁还没有来得及同步到从节点，主节点突然挂掉了，然后从节点变成了新的主节点，这个新的主节点并没有这个锁，所以当另一个客户端再次申请加索时，也会申请成功。这样就导致系统中同一把锁被两个客户端同时持有。
+
+### Redlock算法
+
+为了解决这个问题，发明了Redlock算法，它的流程比较复杂，不过已经有很多开源library做了良好的封装。
+
+为了使用Redlock，需要提供多个Redis实例，Redlock使用“大多数机制”。
+
+加锁时，它会向过半节点发送set（key，value，nx=True，ex=xxx）指令，只要过半节点set成功，就认为加锁成功。释放锁时，需要向所有节点发送del指令。使用Redlock相比单实例Redis的性能会下降一些。
+
+## 过期策略
+
+### 过期的key集合
+
+Redis会将每个设置了过期时间的key放入一个独立的字典中，以后会定时遍历这个字典来删除到期的key。除此之外，它会回使用惰性策略来删除过期的key。所谓惰性策略就是在客户端访问这个key的时候，Redis对key的过期时间进行检查，如果过期了就立刻删除。如果说定时删除是集中处理，那么惰性删除就是零散处理。
+
+### 定时扫描策略
+
+1）从过期字典中随机选出20个key
+
+2）删除这20个key中已经过期的
+
+3）如果过期的key比例超过1/4，那就重复步骤1
+
+同时，为了保证过期扫描不会出现循环过度，导致线程卡死的现象，算法还增加了扫描时间的上限，默认不会超过25ms。
+
+开发人员一定要注意过期时间，如果有大批量的key过期，要给过期时间设置一个随机范围，而不能全部在同一时间过期。
+
+## 淘汰策略
+
+当Redis内存超出物理内存限制时，内存的数据会开始和磁盘产生频繁的交换。交换会让Redis的性能急剧下降。
+
+为了限制最大内存的使用，Redis提供了配置maxmemory来限制内存超出期望大小。当实际内存超过这个值，Redis提供了几种可选策略（maxmemory-policy）来让用户自己决定该如何腾出新的空间以继续提供读写服务。
+
+- noeviction：不会继续提供写请求服务（del可以），读请求可以继续。这个默认淘汰策略。
+
+- volatile-lru：尝试淘汰设置了过期时间的key，最少使用的key优先被淘汰。
+
+- volatile-ttl：跟上面几乎一样，不过淘汰策略不是LRU，而是比较key的剩余寿命，ttl越小越优先被淘汰。
+
+- volatile-random：淘汰随机的key集合
+
+- allkeys-lru：按LRU算法淘汰所有的key，不只是设置了过期时间的key
+
+- allkeys-random：随机淘汰所有的key
+
+## 懒惰删除
+
+Redis内部实际上并不是只有一个主线程，它还有几个异步线程专门用来处理一些耗时的操作。
+
+### Redis为什么使用懒惰删除
+
+删除指令del会直接释放对象的内存，大部分情况下，这个指令非常快，没有明显延迟。不过如果被删除的key是一个非常大的对象，比如一个包含了上千万元素的hash，那么删除操作就会导致单线程卡顿。
+
+Redis为了解决这个卡顿问题，在4.0版本里引入了unlink指令，它能对删除操作进行懒处理，丢给后台线程来异步回收内存。
+
+```shell
+127.0.0.1:6379> set key_ul 123
+OK
+127.0.0.1:6379> unlink key_ul
+(integer) 1
+127.0.0.1:6379> get key_ul
+(nil)
+```
+
+### flush
+
+Redis提供了flushdb和flushall指令，用来清空数据库，这也是及其缓慢的操作。Redis4.0同样给这两个指令带来了异步化，在指令后面增加async参数即可。
+
+```shell
+127.0.0.1:6379> set key_fa 123
+OK
+127.0.0.1:6379> flushall async
+OK
+127.0.0.1:6379> get key_fa
+(nil)
+```
+
+## 优雅地使用Jedis
+
+Jedis是Java用户最常用的Redis开源客户端。它非常小巧，实现原理也很简单，最重要的是很稳定，而且使用的方法、参数名称和官方的文档匹配度非常高。
+
+Java程序由于是多线程的，一般要使用Jedis的连接池JedisPool。同时因为Jedis对象不是线程安全的，当我们使用Jedis对象时，需要从连接池中拿出一个Jedis对象独占，使用完毕后再将这个对象还给连接迟。
+
+```java
+import redis.clients.jedis.Jedis;
+
+public interface CallWithJedis {
+    void call(Jedis jedis);
+}
+```
+
+```java
+public class Holder<T> {
+    private T value;
+
+    public Holder(){}
+
+    public Holder(T value){
+        this.value = value;
+    }
+
+    public void value(T value){
+        this.value = value;
+    }
+
+    public T value(){
+        return value;
+    }
+}
+```
+
+```java
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.exceptions.JedisConnectionException;
+
+public class RedisPool {
+    private JedisPool pool;
+
+    public RedisPool(){
+        this.pool = new JedisPool();
+    }
+
+    public void execute(CallWithJedis caller){
+        Jedis jedis = pool.getResource();
+        try{
+            caller.call(jedis);
+        }catch(JedisConnectionException e){
+            caller.call(jedis);
+        }finally{
+            jedis.close();
+        }
+    }
+}
+```
+
+```java
+public class JedisTest {
+    public static void main(String[] args) {
+        RedisPool redis = new RedisPool();
+        Holder<Long> countHolder = new Holder<Long>();
+        redis.execute(jedis -> {
+            long count = jedis.zcard("jolan");
+            countHolder.value(count);
+        });
+        System.out.println(countHolder.value());
+    }
+
+}
+```
+
+## 保护Redis
+
+### 指令安全
+
+Redis有一些非常危险的指令，这些指令会对Redis的稳定以及数据安全造成非常严重的影响，比如keys指令。
+
+Redis在配置文件中提供了rename-command指令用于将某些危险的指令修改成特别的名称，用来避免误操作。比如在配置文件的security块中增加如下内容。
+
+```
+rename-command keys abckeysabc
+```
+
+这样一来，如果还想执行keys指令，那就不能直接使用keys了，而需要使用abckeysabc。如果想完全封杀某条指令，可以将指令rename成空串，就无法通过任何字符串来执行这条指令了。
+
+```
+rename-command flushall ""
+```
+
+### 端口安全
+
+Redis可以指定监听的ip地址，只有被Reids所监听的客户端才能访问Redis。如果Redis要求只能本地访问，可以将ip配置为127.0.0.1
+
+```
+bind 10.100.20.13
+```
+
+另外，还可以增加Redis的密码访问限制
+
+```
+requirepass yoursecurepasswordhereplease
+```
+
+密码控制也会影响到从节点复制，从节点必须在配置文件里面使用masterauth指令配置响应的密码才可以进行复制操作。
+
+### Lua脚本安全
+
+开发者必须禁止Lua脚本由用户输入的内容生成（类似于SQL注入），这可能会被其他人利用，通过植入恶意的攻击代码来得到Redis的主机权限。
+
+同时，我们应该让Redis以普通用户的身份启动，这样即使存在恶意代码，也无法拿到root权限。
+
+## Redis安全通信
+
+Redis本身并不支持SSL安全链接，不过可以使用SSL代理软件，通过代理我们可以让通信数据得到加密。spiped就是这样的一款SSL代理软件，它也是Redis官方推荐的代理软件。
+
+spiped会在客户端和服务端各启动一个spiped进程。客户端的进程负责接受来自Redis Client发过来的请求数据，加密后传送到服务端的spiped进程。服务端的spiped进程将接收到的数据解密后传递到Redis Server。
+
+### spiped使用入门
+
+略
 
